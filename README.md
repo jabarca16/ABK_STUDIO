@@ -1,45 +1,45 @@
 # ABK Studio
 
-Web para el workflow `Standard_V37` de ComfyUI: prompts, LoRAs (LoRA Manager), proyectos, tamaños, historial persistente.
+Web app for ComfyUI's `Standard_V37` workflow: prompts, LoRAs (LoRA Manager), projects, sizes, persistent history.
 
-Licencia: [PolyForm Noncommercial 1.0.0](LICENSE) — uso y modificación libres, uso comercial no permitido.
+License: [PolyForm Noncommercial 1.0.0](LICENSE) — free to use and modify, commercial use not permitted.
 
-## Requisitos
+## Requirements
 
-- ComfyUI corriendo en `127.0.0.1:8188` (como siempre lo arrancas).
+- ComfyUI running on `127.0.0.1:8188` (start it however you normally do).
 - Python 3.10+.
-- ComfyUI debe tener instalados los custom nodes y modelos que usa el workflow `Standard_V37`, y el workflow mismo debe colocarse en `Workflow/` (no viene incluido en este repo) — ver [REQUIREMENTS.md](REQUIREMENTS.md).
+- ComfyUI must have the custom nodes and models used by the `Standard_V37` workflow installed, and the workflow itself must be placed in `Workflow/` (not included in this repo) — see [REQUIREMENTS.md](REQUIREMENTS.md).
 
-## Primer arranque
+## First run
 
 ```
 cd C:\CodesA\Comfy\ComfyUI_ABKSTUDIO
-venv\Scripts\python -m pip install -r requirements.txt   # solo la primera vez
+venv\Scripts\python -m pip install -r requirements.txt   # first time only
 ```
 
-## Arrancar el sitio
+## Starting the site
 
 ```
 cd C:\CodesA\Comfy\ComfyUI_ABKSTUDIO
 venv\Scripts\python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-- `--host 0.0.0.0` expone el sitio en tu red local (para verlo desde el celular u otro dispositivo): entra a `http://<IP-de-esta-PC>:8000`.
-- Desde esta misma PC: `http://localhost:8000`.
+- `--host 0.0.0.0` exposes the site on your local network (to view it from your phone or another device): go to `http://<this-PC-IP>:8000`.
+- From this same PC: `http://localhost:8000`.
 
-## Estructura
+## Structure
 
-- `Workflow/Standard_V37.api.json` — export en **formato API** del workflow (el que se envía a ComfyUI). Es el que usa la app; no editar a mano salvo que sepas lo que haces. **No está incluido en el repo** (ver [REQUIREMENTS.md](REQUIREMENTS.md)) — hay que colocarlo antes de arrancar.
-- `Workflow/Standard_V37.json` — export en formato UI (el que abre el editor de ComfyUI). Se manda junto al anterior porque algunos nodos (ej. `WidgetToString` de KJNodes) lo necesitan para no truncar la ejecución. Tampoco está incluido en el repo.
-- `app/` — backend FastAPI.
-- `static/` — sitio (HTML/CSS/JS).
-- `data/abkstudio.sqlite3` — historial persistente (se crea solo al primer arranque).
+- `Workflow/Standard_V37.api.json` — the workflow's **API format** export (the one sent to ComfyUI). This is the one the app uses; don't edit it by hand unless you know what you're doing. **Not included in this repo** (see [REQUIREMENTS.md](REQUIREMENTS.md)) — you need to place it yourself before starting.
+- `Workflow/Standard_V37.json` — UI format export (the one ComfyUI's editor opens). Sent alongside the previous one because some nodes (e.g. KJNodes' `WidgetToString`) need it to avoid truncating execution. Also not included in this repo.
+- `app/` — FastAPI backend.
+- `static/` — the site (HTML/CSS/JS).
+- `data/abkstudio.sqlite3` — persistent history (created automatically on first run).
 
-## Si actualizas el workflow en ComfyUI
+## If you update the workflow in ComfyUI
 
-Si cambias el grafo `Standard_V37` dentro de ComfyUI (nuevo nodo, reconexión, etc.), tienes que re-exportar **ambos** archivos y reemplazarlos en `Workflow/`:
+If you change the `Standard_V37` graph inside ComfyUI (new node, rewiring, etc.), you need to re-export **both** files and replace them in `Workflow/`:
 
-1. Menú de ComfyUI → Workflow → Export (guarda el formato UI) → sobrescribe `Standard_V37.json`.
-2. Menú de ComfyUI → Workflow → Export (API) → sobrescribe `Standard_V37.api.json`.
+1. ComfyUI menu → Workflow → Export (saves UI format) → overwrite `Standard_V37.json`.
+2. ComfyUI menu → Workflow → Export (API) → overwrite `Standard_V37.api.json`.
 
-Si además cambian los IDs de los nodos que la app edita (prompt, LoRA, seed, tamaño, checkpoint, sampling, ruta de guardado), hay que actualizar los `NODE_*` en `app/workflow_builder.py` para que apunten a los nuevos IDs.
+If the IDs of the nodes the app edits also change (prompt, LoRA, seed, size, checkpoint, sampling, save path), you need to update the `NODE_*` constants in `app/workflow_builder.py` to point to the new IDs.
