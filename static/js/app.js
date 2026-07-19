@@ -795,6 +795,7 @@ async function loadHistory() {
     }
     item.innerHTML = `
       <span class="frame-no">${historyScope === 'all' ? h.project : '#' + String(rows.length - i).padStart(3, '0')}</span>
+      ${images.length > 1 ? `<span class="img-count">1/${images.length}</span>` : ''}
       ${images.length ? `<button class="expand-btn" title="Ver imágenes">⤢</button>` : ''}
       ${(h.status === 'queued' || h.status === 'running') ? `<span class="pending-icon">⟳</span>` : ''}
       <div class="badge"><span>seed ${String(h.seed).slice(0, 8)}</span><span>${h.status}</span></div>
@@ -904,7 +905,15 @@ function renderHistoryModalGrid(hasMore) {
   const grid = document.getElementById('historyModalGrid');
   grid.innerHTML = '';
   modalHistoryImages = [];
+  let lastProject = null;
   historyModalRows.forEach((h) => {
+    if (historyModalScope === '__all__' && h.project !== lastProject) {
+      const header = document.createElement('div');
+      header.className = 'history-group-header';
+      header.textContent = h.project === '(root)' ? '— root —' : h.project;
+      grid.appendChild(header);
+      lastProject = h.project;
+    }
     const images = JSON.parse(h.image_paths_json || '[]');
     const startIndex = modalHistoryImages.length;
     images.forEach(p => modalHistoryImages.push({ path: p, id: h.id, seed: h.seed, project: h.project }));
@@ -912,7 +921,8 @@ function renderHistoryModalGrid(hasMore) {
     item.className = 'history-item' + (h.status !== 'done' ? ' pending' : '');
     if (images.length) item.style.backgroundImage = `url('${outputUrl(images[0])}')`;
     item.innerHTML = `
-      <span class="frame-no">${historyModalScope === '__all__' ? h.project : String(h.created_at).slice(0, 10)}</span>
+      <span class="frame-no">${String(h.created_at).slice(0, 10)}</span>
+      ${images.length > 1 ? `<span class="img-count">1/${images.length}</span>` : ''}
       ${images.length ? `<button class="expand-btn" title="Ver imágenes">⤢</button>` : ''}
       ${(h.status === 'queued' || h.status === 'running') ? `<span class="pending-icon">⟳</span>` : ''}
       <div class="badge"><span>seed ${String(h.seed).slice(0, 8)}</span><span>${h.status}</span></div>

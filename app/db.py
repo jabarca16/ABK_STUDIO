@@ -109,8 +109,18 @@ def list_generations(project: str | None, limit: int = 60, offset: int = 0) -> l
                 (project, limit, offset),
             ).fetchall()
         else:
+            # Group whole projects together (most recently active project first),
+            # then order each project's own rows by date. Keeps LIMIT/OFFSET stable
+            # across pages since a project's rows never scatter out of sequence.
             rows = conn.execute(
-                "SELECT * FROM generations ORDER BY created_at DESC LIMIT ? OFFSET ?", (limit, offset)
+                """
+                SELECT g.* FROM generations g
+                JOIN (SELECT project, MAX(created_at) AS latest FROM generations GROUP BY project) p
+                  ON p.project = g.project
+                ORDER BY p.latest DESC, g.project, g.created_at DESC
+                LIMIT ? OFFSET ?
+                """,
+                (limit, offset),
             ).fetchall()
         return [dict(r) for r in rows]
 
