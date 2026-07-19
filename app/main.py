@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import comfy_client, config, db, library, workflow_builder
-from .schemas import GenerateRequest, NewProjectRequest
+from .schemas import DeleteHistoryRequest, GenerateRequest, NewProjectRequest
 
 app = FastAPI(title="ABK Studio")
 
@@ -35,11 +35,50 @@ def _stop_tracking(gen_id: str) -> None:
     _last_log.pop(gen_id, None)
 
 
+def _apply_history_entry(gen_id: str, entry: dict | None) -> dict:
+    """Given a gen's raw ComfyUI /history entry (or None if ComfyUI has no
+    record of it), updates the DB row accordingly and returns the fresh row."""
+    if entry is None:
+        return db.get_generation(gen_id)
+    status_info = entry.get("status", {})
+    if status_info.get("completed"):
+        image_paths = comfy_client.extract_output_images(entry)
+        db.update_generation_status(gen_id, "done", image_paths)
+        _stop_tracking(gen_id)
+    elif status_info.get("status_str") == "error":
+        db.update_generation_status(gen_id, "error", [])
+        _stop_tracking(gen_id)
+    else:
+        db.update_generation_status(gen_id, "running")
+    return db.get_generation(gen_id)
+
+
+async def _reconcile_pending_loop() -> None:
+    """Backend-side safety net: if a tab closes/refreshes mid-generation, nobody
+    ever calls /api/status again to persist the final result. This periodically
+    checks ComfyUI's own history for every still-queued/running DB row so the
+    SQLite record catches up with reality even with no client watching."""
+    while True:
+        await asyncio.sleep(15)
+        try:
+            pending = db.list_pending_generations()
+            if not pending:
+                continue
+            history = await comfy_client.get_full_history()
+            for gen in pending:
+                entry = history.get(gen["prompt_id"])
+                if entry is not None:
+                    _apply_history_entry(gen["id"], entry)
+        except Exception:
+            pass  # best-effort; try again on the next tick
+
+
 @app.on_event("startup")
-def on_startup():
+async def on_startup():
     global _ui_workflow_cache
     db.init_db()
     _ui_workflow_cache = workflow_builder.load_ui_template()
+    asyncio.create_task(_reconcile_pending_loop())
 
 
 # ---------- static site ----------
@@ -194,23 +233,8 @@ async def api_status(generation_id: str):
         gen["last_log"] = _last_log.get(generation_id, "")
         return gen  # still queued/running, no history entry yet
 
-    status_info = entry.get("status", {})
-    if status_info.get("completed"):
-        image_paths = comfy_client.extract_output_images(entry)
-        db.update_generation_status(generation_id, "done", image_paths)
-        gen = db.get_generation(generation_id)
-        _stop_tracking(generation_id)
-        gen["last_log"] = ""
-    elif status_info.get("status_str") == "error":
-        db.update_generation_status(generation_id, "error", [])
-        gen = db.get_generation(generation_id)
-        _stop_tracking(generation_id)
-        gen["last_log"] = ""
-    else:
-        db.update_generation_status(generation_id, "running")
-        gen = db.get_generation(generation_id)
-        gen["last_log"] = _last_log.get(generation_id, "")
-
+    gen = _apply_history_entry(generation_id, entry)
+    gen["last_log"] = "" if gen["status"] in ("done", "error") else _last_log.get(generation_id, "")
     return gen
 
 
@@ -251,3 +275,29 @@ def api_generation(generation_id: str):
     if not gen:
         raise HTTPException(404, "Generación no encontrada")
     return gen
+
+
+def _delete_generation_and_files(gen_id: str) -> bool:
+    """Deletes a generation's row and any output files it references. Returns
+    False if the row didn't exist."""
+    gen = db.get_generation(gen_id)
+    if not gen:
+        return False
+    for path in json.loads(gen["image_paths_json"] or "[]"):
+        (config.COMFY_OUTPUT_DIR / path).unlink(missing_ok=True)
+    db.delete_generation(gen_id)
+    _stop_tracking(gen_id)
+    return True
+
+
+@app.delete("/api/history/{generation_id}")
+def api_delete_generation(generation_id: str):
+    if not _delete_generation_and_files(generation_id):
+        raise HTTPException(404, "Generación no encontrada")
+    return {"deleted": 1}
+
+
+@app.post("/api/history/delete")
+def api_delete_generations(req: DeleteHistoryRequest):
+    deleted = sum(1 for gen_id in req.ids if _delete_generation_and_files(gen_id))
+    return {"deleted": deleted}

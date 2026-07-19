@@ -23,6 +23,15 @@ async def get_history(prompt_id: str) -> dict:
         return resp.json()
 
 
+async def get_full_history() -> dict:
+    """All prompt_id -> history entries ComfyUI currently has, for reconciling
+    generations nobody polled to completion (closed tab, refresh mid-job)."""
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.get(f"{config.COMFY_BASE_URL}/history")
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def get_queue() -> dict:
     async with httpx.AsyncClient(timeout=5) as client:
         resp = await client.get(f"{config.COMFY_BASE_URL}/queue")

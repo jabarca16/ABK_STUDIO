@@ -24,3 +24,7 @@ class GenerateRequest(BaseModel):
 
 class NewProjectRequest(BaseModel):
     name: str
+
+
+class DeleteHistoryRequest(BaseModel):
+    ids: list[str]

@@ -101,6 +101,16 @@ def get_generation_by_prompt_id(prompt_id: str) -> dict | None:
         return dict(row) if row else None
 
 
+def list_pending_generations() -> list[dict]:
+    """Rows still queued/running — used to reconcile against ComfyUI's own
+    history when nobody is polling a given generation (tab closed/refreshed)."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM generations WHERE status IN ('queued', 'running')"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 def list_generations(project: str | None, limit: int = 60, offset: int = 0) -> list[dict]:
     with get_conn() as conn:
         if project and project != "__all__":

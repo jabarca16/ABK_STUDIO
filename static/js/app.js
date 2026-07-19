@@ -798,7 +798,10 @@ async function loadHistory() {
       ${images.length > 1 ? `<span class="img-count">1/${images.length}</span>` : ''}
       ${images.length ? `<button class="expand-btn" title="Ver imágenes">⤢</button>` : ''}
       ${(h.status === 'queued' || h.status === 'running') ? `<span class="pending-icon">⟳</span>` : ''}
-      <div class="badge"><span>seed ${String(h.seed).slice(0, 8)}</span><span>${h.status}</span></div>
+      <div class="badge">
+        <span>seed ${String(h.seed).slice(0, 8)}</span><span>${h.status}</span>
+        <button class="delete-btn" title="Eliminar">🗑</button>
+      </div>
     `;
     item.addEventListener('click', () => restoreGeneration(h.id));
     if (images.length) {
@@ -807,8 +810,23 @@ async function loadHistory() {
         openLightbox(historyImages.map(x => x.path), startIndex, historyImages);
       });
     }
+    item.querySelector('.delete-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteSingleGeneration(h.id, loadHistory);
+    });
     grid.appendChild(item);
   });
+}
+
+async function deleteSingleGeneration(id, onDeleted) {
+  if (!confirm('¿Eliminar esta generación? Se borra también la imagen del disco. Esta acción no se puede deshacer.')) return;
+  try {
+    await api(`/api/history/${id}`, { method: 'DELETE' });
+    showToast('Generación eliminada');
+    if (onDeleted) onDeleted();
+  } catch (e) {
+    showToast('No se pudo eliminar: ' + e.message, true);
+  }
 }
 
 async function restoreGeneration(id) {
@@ -862,6 +880,9 @@ let historyModalScope = '__all__'; // '__all__' or a project name
 let historyModalOffset = 0;
 let historyModalRows = [];
 let modalHistoryImages = []; // flat {path, id, seed, project} for the modal's lightbox
+let historySelectMode = false;
+let historySelectedIds = new Set();
+let historyModalHasMore = false;
 
 function renderHistoryModalTree() {
   const el = document.getElementById('historyModalTree');
@@ -898,7 +919,8 @@ async function loadHistoryModalPage(reset) {
   }
   historyModalRows = historyModalRows.concat(rows);
   historyModalOffset += rows.length;
-  renderHistoryModalGrid(rows.length === HISTORY_PAGE_SIZE);
+  historyModalHasMore = rows.length === HISTORY_PAGE_SIZE;
+  renderHistoryModalGrid(historyModalHasMore);
 }
 
 function renderHistoryModalGrid(hasMore) {
@@ -918,16 +940,24 @@ function renderHistoryModalGrid(hasMore) {
     const startIndex = modalHistoryImages.length;
     images.forEach(p => modalHistoryImages.push({ path: p, id: h.id, seed: h.seed, project: h.project }));
     const item = document.createElement('div');
-    item.className = 'history-item' + (h.status !== 'done' ? ' pending' : '');
+    item.className = 'history-item' + (h.status !== 'done' ? ' pending' : '') + (historySelectedIds.has(h.id) ? ' selected' : '');
     if (images.length) item.style.backgroundImage = `url('${outputUrl(images[0])}')`;
     item.innerHTML = `
       <span class="frame-no">${String(h.created_at).slice(0, 10)}</span>
+      <span class="select-check"></span>
       ${images.length > 1 ? `<span class="img-count">1/${images.length}</span>` : ''}
       ${images.length ? `<button class="expand-btn" title="Ver imágenes">⤢</button>` : ''}
       ${(h.status === 'queued' || h.status === 'running') ? `<span class="pending-icon">⟳</span>` : ''}
-      <div class="badge"><span>seed ${String(h.seed).slice(0, 8)}</span><span>${h.status}</span></div>
+      <div class="badge">
+        <span>seed ${String(h.seed).slice(0, 8)}</span><span>${h.status}</span>
+        <button class="delete-btn" title="Eliminar">🗑</button>
+      </div>
     `;
     item.addEventListener('click', () => {
+      if (historySelectMode) {
+        toggleHistorySelection(h.id, item);
+        return;
+      }
       restoreGeneration(h.id);
       closeHistoryModal();
     });
@@ -937,6 +967,10 @@ function renderHistoryModalGrid(hasMore) {
         openLightbox(modalHistoryImages.map(x => x.path), startIndex, modalHistoryImages);
       });
     }
+    item.querySelector('.delete-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteSingleGeneration(h.id, () => loadHistoryModalPage(true));
+    });
     grid.appendChild(item);
   });
   if (hasMore) {
@@ -948,8 +982,60 @@ function renderHistoryModalGrid(hasMore) {
   }
 }
 
+function toggleHistorySelection(id, itemEl) {
+  if (historySelectedIds.has(id)) {
+    historySelectedIds.delete(id);
+    itemEl.classList.remove('selected');
+  } else {
+    historySelectedIds.add(id);
+    itemEl.classList.add('selected');
+  }
+  renderHistoryBulkBar();
+}
+
+function renderHistoryBulkBar() {
+  const bar = document.getElementById('historyBulkBar');
+  const count = historySelectedIds.size;
+  document.getElementById('historyBulkCount').textContent = `${count} seleccionada${count === 1 ? '' : 's'}`;
+  bar.classList.toggle('open', historySelectMode && count > 0);
+}
+
+function setHistorySelectMode(on) {
+  historySelectMode = on;
+  historySelectedIds.clear();
+  document.getElementById('historyModalGrid').classList.toggle('select-mode', on);
+  document.getElementById('historySelectToggle').classList.toggle('active', on);
+  renderHistoryModalGrid(historyModalHasMore);
+  renderHistoryBulkBar();
+}
+
+document.getElementById('historySelectToggle').addEventListener('click', () => {
+  setHistorySelectMode(!historySelectMode);
+});
+document.getElementById('historyBulkCancel').addEventListener('click', () => {
+  setHistorySelectMode(false);
+});
+document.getElementById('historyBulkDelete').addEventListener('click', async () => {
+  const ids = [...historySelectedIds];
+  if (!ids.length) return;
+  if (!confirm(`¿Eliminar ${ids.length} generación(es)? Se borran también las imágenes del disco. Esta acción no se puede deshacer.`)) return;
+  try {
+    const res = await api('/api/history/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
+    showToast(`${res.deleted} generación(es) eliminadas`);
+    setHistorySelectMode(false);
+    loadHistoryModalPage(true);
+  } catch (e) {
+    showToast('No se pudo eliminar: ' + e.message, true);
+  }
+});
+
 function openHistoryModal() {
   document.getElementById('historyModalBackdrop').classList.add('open');
+  setHistorySelectMode(false);
   renderHistoryModalTree();
   loadHistoryModalPage(true);
 }
