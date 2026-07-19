@@ -2,6 +2,8 @@
 
 Web app for ComfyUI's `Standard_V37` workflow: prompts, LoRAs (LoRA Manager), projects, sizes, persistent history.
 
+Continous updates and on work project.
+
 License: [PolyForm Noncommercial 1.0.0](LICENSE) — free to use and modify, commercial use not permitted.
 
 ## Requirements
@@ -43,3 +45,12 @@ If you change the `Standard_V37` graph inside ComfyUI (new node, rewiring, etc.)
 2. ComfyUI menu → Workflow → Export (API) → overwrite `Standard_V37.api.json`.
 
 If the IDs of the nodes the app edits also change (prompt, LoRA, seed, size, checkpoint, sampling, save path), you need to update the `NODE_*` constants in `app/workflow_builder.py` to point to the new IDs.
+
+Main
+<img width="1456" height="1270" alt="image" src="https://github.com/user-attachments/assets/6901862d-cd8d-477e-ac15-09bb33a7106c" />
+
+Lora Library
+
+<img width="935" height="983" alt="image" src="https://github.com/user-attachments/assets/67d73010-863e-46f2-a79a-e3cd318bc0ca" />
+
+
