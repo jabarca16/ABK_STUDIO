@@ -13,14 +13,14 @@ License: [PolyForm Noncommercial 1.0.0](LICENSE) — free to use and modify, com
 ## First run
 
 ```
-cd C:\CodesA\Comfy\ComfyUI_ABKSTUDIO
+cd path/to/ABK_STUDIO
 venv\Scripts\python -m pip install -r requirements.txt   # first time only
 ```
 
 ## Starting the site
 
 ```
-cd C:\CodesA\Comfy\ComfyUI_ABKSTUDIO
+cd path/to/ABK_STUDIO
 venv\Scripts\python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
