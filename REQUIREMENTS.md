@@ -1,76 +1,76 @@
-# Requisitos de ComfyUI para ABK Studio
+# ComfyUI requirements for ABK Studio
 
-ABK Studio **no instala nada en ComfyUI** — solo envía un grafo a una instancia de ComfyUI que ya debe tener instalados los custom nodes y modelos que ese grafo usa. Si falta alguno de los siguientes, la generación falla con un error de "node type not found" o similar al ejecutar el prompt.
+ABK Studio **doesn't install anything in ComfyUI** — it just sends a graph to a ComfyUI instance that must already have the custom nodes and models that graph uses installed. If any of the following is missing, the generation fails with a "node type not found" error (or similar) when the prompt runs.
 
-Esta lista se obtuvo inspeccionando los `class_type` presentes en el workflow `Standard_V37` original y contrastándolos contra los custom nodes instalados en esta máquina (`ComfyUI/custom_nodes`).
+This list was obtained by inspecting the `class_type`s present in the original `Standard_V37` workflow and matching them against the custom nodes installed on this machine (`ComfyUI/custom_nodes`).
 
-## El workflow NO viene incluido en este repo
+## The workflow is NOT included in this repo
 
-`Workflow/*.json` está en `.gitignore` (ver [Origen del workflow](#origen-del-workflow) más abajo — es contenido de un tercero en Civitai, no lo redistribuimos). Antes de arrancar la app tienes que colocar tú mismo ahí los dos archivos que el backend espera, con estos nombres exactos:
+`Workflow/*.json` is in `.gitignore` (see [Workflow origin](#workflow-origin) below — it's third-party content from Civitai, we don't redistribute it). Before starting the app you need to place the two files the backend expects there yourself, with these exact names:
 
-- `Workflow/Standard_V37.json` — export en formato UI.
-- `Workflow/Standard_V37.api.json` — export en formato API (el que realmente se envía a ComfyUI).
+- `Workflow/Standard_V37.json` — UI format export.
+- `Workflow/Standard_V37.api.json` — API format export (the one actually sent to ComfyUI).
 
-Puedes usar el workflow original de Civitai (link abajo) o el tuyo propio, siempre que cumpla el **contrato de nodos** de la siguiente sección.
+You can use the original Civitai workflow (link below) or your own, as long as it satisfies the **node contract** in the next section.
 
-## Contrato de nodos (si usas tu propio workflow)
+## Node contract (if you use your own workflow)
 
-`app/workflow_builder.py` edita el grafo por **ID de nodo fijo**, escribiendo campos concretos. Tu workflow — el de Civitai o uno propio — debe tener, en estos IDs exactos (o debes actualizar las constantes `NODE_*` en `workflow_builder.py` para que apunten a los IDs que uses), un nodo que acepte el campo indicado:
+`app/workflow_builder.py` edits the graph by **fixed node ID**, writing specific fields. Your workflow — the Civitai one or your own — must have, at these exact IDs (or you must update the `NODE_*` constants in `workflow_builder.py` to point to whatever IDs you use), a node that accepts the listed field:
 
-| ID | Constante | Campo(s) que se escriben | Tipo de nodo esperado |
+| ID | Constant | Field(s) written | Expected node type |
 |---|---|---|---|
-| 1 | `NODE_WIDTH` | `value` | nodo primitivo (int) |
+| 1 | `NODE_WIDTH` | `value` | primitive node (int) |
 | 3 | `NODE_POSITIVE` | `wildcard_text`, `populated_text` | ImpactWildcardProcessor |
 | 4 | `NODE_NEGATIVE` | `wildcard_text`, `populated_text` | ImpactWildcardProcessor |
-| 5 | `NODE_LORA` | `loras` (lista `__value__`), `text` | Lora Loader (LoraManager) |
-| 12 | `NODE_HEIGHT` | `value` | nodo primitivo (int) |
+| 5 | `NODE_LORA` | `loras` (`__value__` list), `text` | Lora Loader (LoraManager) |
+| 12 | `NODE_HEIGHT` | `value` | primitive node (int) |
 | 30 | `NODE_CHECKPOINT` | `ckpt_name` | CheckpointLoaderSimple |
 | 32 | `NODE_SEED` | `seed` | Seed (rgthree) |
 | 18 | `NODE_PARAMS` | `steps`, `cfg`, `sampler`, `scheduler` | KSampler |
-| 29 | `NODE_BATCH` | `value` | nodo primitivo (int) |
+| 29 | `NODE_BATCH` | `value` | primitive node (int) |
 | 54 | `NODE_SAVE` | `path` | Image Saver |
 
-El **output** es flexible: `comfy_client.extract_output_images()` no depende de ningún ID, recorre todo el `/history` buscando cualquier nodo que produzca `images` — puedes tener el nodo de guardado/preview que quieras, donde quieras, sin tocar código.
+The **output** side is flexible: `comfy_client.extract_output_images()` doesn't depend on any ID — it scans the whole `/history` response for any node that produces `images`. You can have whatever save/preview node you want, wherever you want, without touching code.
 
-## Custom nodes requeridos (vía ComfyUI-Manager)
+## Required custom nodes (via ComfyUI-Manager)
 
-| Custom node (repo) | Nodos usados por el workflow |
+| Custom node (repo) | Nodes used by the workflow |
 |---|---|
 | **ComfyUI-Impact-Pack** | `FaceDetailerPipe`, `ToDetailerPipe`, `EditDetailerPipe`, `ImpactSwitch`, `ImpactWildcardProcessor` |
 | **ComfyUI-Impact-Subpack** | `SAMLoader`, `UltralyticsDetectorProvider` |
 | **ComfyUI-Easy-Use** | `easy int`, `easy showAnything` |
 | **rgthree-comfy** | `Seed (rgthree)`, `Image Comparer (rgthree)` |
 | **ComfyUI-Image-Saver** | `Image Saver`, `Input Parameters (Image Saver)` |
-| **ComfyUI-LoRA-Manager** | `Lora Loader (LoraManager)`, `TriggerWord Toggle (LoraManager)` — además expone la API REST `/api/lm/*` que usa el backend de ABK Studio para listar LoRAs/checkpoints y servir previews |
-| **ComfyUI-KJNodes** | `WidgetToString` — lee el export en formato UI (`Standard_V37.json`), por eso ABK Studio manda ambos archivos al ejecutar |
+| **ComfyUI-LoRA-Manager** | `Lora Loader (LoraManager)`, `TriggerWord Toggle (LoraManager)` — also exposes the `/api/lm/*` REST API that ABK Studio's backend uses to list LoRAs/checkpoints and serve previews |
+| **ComfyUI-KJNodes** | `WidgetToString` — reads the UI format export (`Standard_V37.json`), which is why ABK Studio sends both files when running |
 
-Todos se instalan desde **ComfyUI-Manager** (`Manager → Install Custom Nodes`, buscar por el nombre del repo) o clonándolos manualmente en `ComfyUI/custom_nodes/`. Después de instalar, reiniciar ComfyUI.
+All of these install from **ComfyUI-Manager** (`Manager → Install Custom Nodes`, search by repo name) or by cloning them manually into `ComfyUI/custom_nodes/`. Restart ComfyUI after installing.
 
-## Nodos que NO requieren nada extra (son core de ComfyUI)
+## Nodes that need nothing extra (ComfyUI core)
 
-`CheckpointLoaderSimple`, `CLIPSetLastLayer`, `CLIPTextEncode`, `EmptyLatentImage`, `KSampler`, `VAEDecode`, `PrimitiveBoolean`, `PrimitiveFloat`, `DifferentialDiffusion`, `RegexReplace`, `StringConcatenate` — vienen incluidos en cualquier instalación estándar de ComfyUI (algunos, como `RegexReplace`/`StringConcatenate`/`DifferentialDiffusion`, requieren una versión relativamente reciente de ComfyUI; si tu instalación es vieja, actualízala).
+`CheckpointLoaderSimple`, `CLIPSetLastLayer`, `CLIPTextEncode`, `EmptyLatentImage`, `KSampler`, `VAEDecode`, `PrimitiveBoolean`, `PrimitiveFloat`, `DifferentialDiffusion`, `RegexReplace`, `StringConcatenate` — included in any standard ComfyUI install (some, like `RegexReplace`/`StringConcatenate`/`DifferentialDiffusion`, require a reasonably recent ComfyUI version; update if yours is old).
 
-## Modelos requeridos
+## Required models
 
-Estos nombres están *hardcodeados* como default en el grafo (`Standard_V37.api.json`); si no existen con ese nombre exacto en la carpeta de modelos de ComfyUI, el nodo correspondiente falla al cargar:
+These names are *hardcoded* as defaults in the graph (`Standard_V37.api.json`); if they don't exist under that exact name in ComfyUI's models folder, the corresponding node fails to load:
 
 - **SAMLoader** → `models/sams/sam_vit_b_01ec64.pth`
 - **UltralyticsDetectorProvider** → `models/ultralytics/bbox/face_yolov8m.pt`
-- **Checkpoint** (`CheckpointLoaderSimple`, nodo `NODE_CHECKPOINT`) y **LoRAs** (`Lora Loader (LoraManager)`) — no vienen fijos: los elige el usuario desde la UI de ABK Studio, pero deben existir en `models/checkpoints/` y `models/loras/` respectivamente para aparecer en los selectores (la app los lista vía `/object_info` y la API de LoRA Manager).
-  - El workflow está diseñado para checkpoints de la familia **Illustrious / SDXL / NoobAI** (Clip Skip = 2, nodo `CLIPSetLastLayer`). Usar un checkpoint de otra familia (SD1.5, FLUX, etc.) probablemente rompe proporciones/calidad aunque técnicamente cargue.
+- **Checkpoint** (`CheckpointLoaderSimple`, `NODE_CHECKPOINT` node) and **LoRAs** (`Lora Loader (LoraManager)`) — not fixed: chosen by the user from ABK Studio's UI, but they must exist in `models/checkpoints/` and `models/loras/` respectively to show up in the selectors (the app lists them via `/object_info` and LoRA Manager's API).
+  - The workflow is designed for checkpoints of the **Illustrious / SDXL / NoobAI** family (Clip Skip = 2, `CLIPSetLastLayer` node). Using a checkpoint from another family (SD1.5, FLUX, etc.) will likely break proportions/quality even if it technically loads.
 
-Los modelos de Impact Pack / SAM / Ultralytics normalmente se descargan automáticamente la primera vez que ComfyUI-Manager instala Impact Pack (tiene un instalador de modelos), o manualmente colocándolos en las rutas de arriba.
+Impact Pack / SAM / Ultralytics models are usually downloaded automatically the first time ComfyUI-Manager installs Impact Pack (it has a model installer), or you can place them manually at the paths above.
 
-## Origen del workflow
+## Workflow origin
 
-`Standard_V37` (y las variantes `Advanced_V37`, `Basic_V37`, `Detailer_V37` que también están en `Workflow/` pero que ABK Studio no usa actualmente) provienen del paquete "ComfyUI Image Workflows V37" publicado en Civitai: https://civitai.com/models/1386234/comfyui-image-workflows
+`Standard_V37` (and the `Advanced_V37`, `Basic_V37`, `Detailer_V37` variants also present in `Workflow/` but not currently used by ABK Studio) come from the "ComfyUI Image Workflows V37" package published on Civitai: https://civitai.com/models/1386234/comfyui-image-workflows
 
-## Resumen para la guía de instalación
+## Installation checklist summary
 
-1. Instalar ComfyUI (si no está) + **ComfyUI-Manager**.
-2. Desde Manager, instalar: `ComfyUI-Impact-Pack`, `ComfyUI-Impact-Subpack`, `ComfyUI-Easy-Use`, `rgthree-comfy`, `ComfyUI-Image-Saver`, `ComfyUI-LoRA-Manager`, `ComfyUI-KJNodes`.
-3. Descargar el workflow (Civitai, link abajo, o el tuyo propio compatible) y colocar `Standard_V37.json` + `Standard_V37.api.json` en `Workflow/`.
-4. Reiniciar ComfyUI y confirmar que `Standard_V37.json` carga sin nodos rojos ("missing node type") en el editor de ComfyUI.
-5. Verificar que existan `sam_vit_b_01ec64.pth` (en `models/sams`) y `face_yolov8m.pt` (en `models/ultralytics/bbox`).
-6. Poner al menos un checkpoint en `models/checkpoints` y (opcional) LoRAs en `models/loras`.
-7. Arrancar ComfyUI, luego arrancar ABK Studio (ver `README.md`).
+1. Install ComfyUI (if not already) + **ComfyUI-Manager**.
+2. From Manager, install: `ComfyUI-Impact-Pack`, `ComfyUI-Impact-Subpack`, `ComfyUI-Easy-Use`, `rgthree-comfy`, `ComfyUI-Image-Saver`, `ComfyUI-LoRA-Manager`, `ComfyUI-KJNodes`.
+3. Download the workflow (Civitai, link above, or your own compatible one) and place `Standard_V37.json` + `Standard_V37.api.json` in `Workflow/`.
+4. Restart ComfyUI and confirm `Standard_V37.json` loads without red nodes ("missing node type") in ComfyUI's editor.
+5. Verify `sam_vit_b_01ec64.pth` (in `models/sams`) and `face_yolov8m.pt` (in `models/ultralytics/bbox`) exist.
+6. Place at least one checkpoint in `models/checkpoints` and (optionally) LoRAs in `models/loras`.
+7. Start ComfyUI, then start ABK Studio (see `README.md`).
