@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ABK Studio</title>
+<link rel="stylesheet" href="/static/css/style.css?v=12">
+</head>
+<body>
+
+<div class="grain"></div>
+
+<div class="topbar">
+  <div class="brand">
+    <span class="mark"></span>
+    <span class="name">ABK STUDIO</span>
+    <span class="status-tag" id="serverStatus"><span class="status-dot"></span><span class="status-label">starting</span></span>
+  </div>
+  <div class="workflow-chip">workflow &nbsp;<b>Standard_V37</b></div>
+
+  <div class="project-select" id="projectSelectWrap">
+    <span class="tag">Project</span>
+    <select id="projectSelect"></select>
+    <button class="project-new-btn" id="newProjectBtn" title="New project">+</button>
+  </div>
+  <div class="project-new-row" id="projectNewRow">
+    <input type="text" id="newProjectInput" placeholder="project name…" maxlength="40">
+    <button id="confirmNewProject" title="Create">✓</button>
+    <button class="cancel" id="cancelNewProject" title="Cancel">×</button>
+  </div>
+
+  <div class="theme-menu-wrap" id="themeMenuWrap">
+    <button class="theme-toggle" id="themeToggle" title="Theme">◐</button>
+    <div class="theme-menu" id="themeMenu">
+      <button class="theme-menu-item" data-theme-choice="dark">Dark</button>
+      <button class="theme-menu-item" data-theme-choice="light">Light</button>
+      <button class="theme-menu-item" data-theme-choice="nova">Nova</button>
+    </div>
+  </div>
+</div>
+
+<div class="layout">
+
+  <!-- LEFT: prompt + lora -->
+  <div class="pane">
+    <div class="pane-head"><h2>Prompt &amp; LoRA</h2><button class="sync-btn" id="clearAllBtn" title="Limpiar todo para una nueva generación">🗑</button></div>
+    <div class="pane-body">
+
+      <div>
+        <label class="field-label">Positive <span class="hint">📝 POSITIVE</span></label>
+        <textarea id="positive"></textarea>
+      </div>
+
+      <div>
+        <label class="field-label">Negative</label>
+        <textarea class="negative" id="negative"></textarea>
+      </div>
+
+      <div>
+        <label class="field-label">LoRA stack <span class="hint" id="loraCount">0 active</span></label>
+        <div class="lora-stack" id="loraStack"></div>
+        <button class="add-lora-btn" id="openLoraModal" style="margin-top:8px;">
+          <span class="plus">+</span> Add LoRA from library
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- CENTER: stage -->
+  <div class="pane stage">
+    <div class="stage-toolbar">
+      <button class="generate-btn" id="generateBtn"><span class="bolt">▶</span> Generate</button>
+      <div class="batch-count">Batch <input type="number" id="batchSize" value="1" min="1" max="4" step="1"> <span class="hint-inline">1–4</span></div>
+      <div class="spacer"></div>
+      <div class="queue-info" id="queueInfo">queue — idle</div>
+    </div>
+
+    <div class="canvas-area count-1" id="canvasArea">
+      <div class="frames-grid" id="framesGrid"></div>
+    </div>
+
+    <div class="batch-progress" id="batchProgress">
+      <div class="track"><div class="fill" id="progressFill"></div></div>
+      <div class="label" id="progressLabel">esperando…</div>
+      <div class="log-peek" id="logPeek"></div>
+    </div>
+
+    <div class="stage-meta">
+      <span><b id="sizeMeta">1024×1536</b></span>
+      <span>steps <b id="stepsMeta">40</b></span>
+      <span>cfg <b id="cfgMeta">5.0</b></span>
+      <span>sampler <b id="samplerMeta">euler_ancestral</b></span>
+      <span>seed <b id="seedMeta">-1</b></span>
+      <span>saves to <b id="pathMeta">output/</b></span>
+    </div>
+  </div>
+
+  <!-- RIGHT: params + history -->
+  <div class="pane">
+    <div class="pane-head"><h2>Parameters</h2></div>
+    <div class="pane-body" style="gap:16px;">
+
+      <div>
+        <label class="field-label">Checkpoint <button class="sync-btn" id="syncCheckpoints" title="Sincronizar lista desde ComfyUI">⟳</button></label>
+        <div class="ckpt-picker" id="openCkptModal">
+          <div class="ckpt-thumb" id="ckptCurrentThumb"></div>
+          <div class="ckpt-current" id="ckptCurrentName">—</div>
+        </div>
+        <select id="checkpoint" style="display:none"></select>
+      </div>
+
+      <details class="advanced">
+        <summary><span>Size</span><span class="summary-hint" id="sizeHint">1024 × 1536</span></summary>
+        <div class="adv-body">
+          <div class="tier-toggle" id="tierToggle"></div>
+          <div class="size-grid" id="sizeGrid"></div>
+          <div class="custom-size-row" id="customSizeRow">
+            <div>
+              <label class="field-label">Width</label>
+              <input type="number" id="width" value="1024" step="8" min="256" max="2048">
+            </div>
+            <div>
+              <label class="field-label">Height</label>
+              <input type="number" id="height" value="1536" step="8" min="256" max="2048">
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <div>
+        <label class="field-label">Seed</label>
+        <div class="seed-row">
+          <input type="text" id="seed" value="-1">
+          <button id="randomSeed" title="Randomize">⚄</button>
+          <button id="lockSeed" title="Lock seed">🔒</button>
+        </div>
+      </div>
+
+      <details class="advanced">
+        <summary>Sampling <button class="sync-btn" id="syncSampling" title="Sincronizar samplers/schedulers">⟳</button></summary>
+        <div class="adv-body">
+          <div class="row2">
+            <div>
+              <label class="field-label">Steps</label>
+              <input type="number" id="steps" value="40" min="1" max="150">
+            </div>
+            <div>
+              <label class="field-label">CFG</label>
+              <input type="number" id="cfg" value="5.0" min="0" max="30" step="0.1">
+            </div>
+          </div>
+          <div class="row2">
+            <div>
+              <label class="field-label">Sampler</label>
+              <select id="sampler"></select>
+            </div>
+            <div>
+              <label class="field-label">Scheduler</label>
+              <select id="scheduler"></select>
+            </div>
+          </div>
+        </div>
+      </details>
+
+    </div>
+
+    <div class="pane-head" style="margin-top:6px;"><h2>History</h2><button class="sync-btn" id="syncHistoryBtn" title="Sincronizar con archivos en disco">⟳</button></div>
+    <div class="history-filter" id="historyFilter"></div>
+    <div class="history-grid" id="historyGrid"></div>
+    <button class="history-viewall-btn" id="openHistoryModal">Ver historial completo →</button>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"><span class="dot"></span><span class="msg"></span></div>
+
+<!-- LoRA picker modal -->
+<div class="modal-backdrop" id="loraModalBackdrop">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>LoRA library</h3>
+      <button class="sync-btn" id="syncLoras" title="Sincronizar desde LoRA Manager">⟳</button>
+      <input type="text" id="loraSearch" placeholder="Search name or trigger word…">
+      <button class="modal-close" id="closeLoraModal">×</button>
+    </div>
+    <div class="modal-split">
+      <div class="lora-tree scrollbar-hidden" id="loraTree"></div>
+      <div class="modal-body scrollbar-hidden" id="loraGrid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Image lightbox -->
+<div class="modal-backdrop lightbox-backdrop" id="lightboxBackdrop">
+  <div class="lightbox">
+    <button class="modal-close" id="closeLightbox">×</button>
+    <button class="lightbox-nav prev" id="lightboxPrev">‹</button>
+    <img id="lightboxImg" src="" alt="">
+    <button class="lightbox-nav next" id="lightboxNext">›</button>
+    <div class="lightbox-meta" id="lightboxMeta"></div>
+    <button class="lightbox-restore" id="lightboxRestore" title="Usar estos parámetros">↺ usar parámetros</button>
+  </div>
+</div>
+
+<!-- Full history browser modal -->
+<div class="modal-backdrop" id="historyModalBackdrop">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Historial completo</h3>
+      <button class="modal-close" id="closeHistoryModal">×</button>
+    </div>
+    <div class="modal-split">
+      <div class="lora-tree scrollbar-hidden" id="historyModalTree"></div>
+      <div class="modal-body scrollbar-hidden" id="historyModalGrid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Checkpoint picker modal -->
+<div class="modal-backdrop" id="ckptModalBackdrop">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Checkpoint library</h3>
+      <button class="sync-btn" id="syncCkptGallery" title="Sincronizar desde LoRA Manager">⟳</button>
+      <input type="text" id="ckptSearch" placeholder="Search name…">
+      <button class="modal-close" id="closeCkptModal">×</button>
+    </div>
+    <div class="modal-split">
+      <div class="lora-tree scrollbar-hidden" id="ckptTree"></div>
+      <div class="modal-body scrollbar-hidden" id="ckptGrid"></div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/app.js?v=14"></script>
+</body>
+</html>

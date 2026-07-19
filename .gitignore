@@ -1,0 +1,16 @@
+# Workflows de ComfyUI (provienen de Civitai, no se redistribuyen desde este repo)
+# ver REQUIREMENTS.md — el usuario debe colocar aquí su propia copia compatible
+Workflow/*.json
+!Workflow/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+venv/
+
+# Datos locales (historial de generaciones, es info personal de cada usuario)
+data/*
+!data/.gitkeep
+
+# Salidas de ComfyUI si algo se genera dentro del proyecto
+/output/
