@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ABK Studio</title>
-<link rel="stylesheet" href="/static/css/style.css?v=17">
+<link rel="stylesheet" href="/static/css/style.css?v=20">
 </head>
 <body>
 
@@ -73,6 +73,7 @@
       <button class="generate-btn" id="generateBtn"><span class="bolt">▶</span> Generate</button>
       <div class="batch-count">Batch <input type="number" id="batchSize" value="1" min="1" max="4" step="1"> <span class="hint-inline">1–4</span></div>
       <div class="spacer"></div>
+      <button class="sync-btn" id="openSettingsModal" title="Workflow feature toggles">⚙</button>
       <div class="queue-info" id="queueInfo">queue — idle</div>
     </div>
 
@@ -244,6 +245,50 @@
   </div>
 </div>
 
-<script src="/static/js/app.js?v=16"></script>
+<!-- Workflow feature toggles modal -->
+<div class="modal-backdrop" id="settingsModalBackdrop">
+  <div class="modal settings-modal">
+    <div class="modal-head">
+      <h3>Workflow toggles</h3>
+      <button class="modal-close" id="closeSettingsModal">×</button>
+    </div>
+    <div class="settings-list" id="settingsList">
+      <label class="settings-row"><span>Enable CLIP Skip</span><span class="settings-switch"><input type="checkbox" data-toggle="clip_skip"><span class="knob"></span></span></label>
+      <label class="settings-row"><span>Enable Use SAMLoader</span><span class="settings-switch"><input type="checkbox" data-toggle="use_samloader"><span class="knob"></span></span></label>
+      <label class="settings-row"><span>Enable Color Match</span><span class="settings-switch"><input type="checkbox" data-toggle="color_match"><span class="knob"></span></span></label>
+      <label class="settings-row"><span>Enable HiresFix Pre Detailer</span><span class="settings-switch"><input type="checkbox" data-toggle="hiresfix_pre"><span class="knob"></span></span></label>
+      <label class="settings-row"><span>Enable HiresFix Post Detailer</span><span class="settings-switch"><input type="checkbox" data-toggle="hiresfix_post"><span class="knob"></span></span></label>
+      <label class="settings-row"><span>Enable VPred Model?</span><span class="settings-switch"><input type="checkbox" data-toggle="vpred_model"><span class="knob"></span></span></label>
+      <label class="settings-row"><span>Enable Epsilon Scaling</span><span class="settings-switch"><input type="checkbox" data-toggle="epsilon_scaling"><span class="knob"></span></span></label>
+      <label class="settings-row"><span>Enable CFGZeroStar</span><span class="settings-switch"><input type="checkbox" data-toggle="cfg_zero_star"><span class="knob"></span></span></label>
+      <label class="settings-row"><span>Enable Seperate VAE</span><span class="settings-switch"><input type="checkbox" data-toggle="seperate_vae"><span class="knob"></span></span></label>
+      <label class="settings-row"><span>Enable Contrast</span><span class="settings-switch"><input type="checkbox" data-toggle="contrast"><span class="knob"></span></span></label>
+      <label class="settings-row"><span>Enable Image Morphology</span><span class="settings-switch"><input type="checkbox" data-toggle="image_morphology"><span class="knob"></span></span></label>
+      <label class="settings-row"><span>Enable Image Quantize</span><span class="settings-switch"><input type="checkbox" data-toggle="image_quantize"><span class="knob"></span></span></label>
+      <label class="settings-row"><span>Enable Image Sharpen</span><span class="settings-switch"><input type="checkbox" data-toggle="image_sharpen"><span class="knob"></span></span></label>
+
+      <div class="settings-section-title">Detailers</div>
+      <label class="settings-row"><span>Enable Detailer</span><span class="settings-switch"><input type="checkbox" data-toggle="detailer"><span class="knob"></span></span></label>
+      <div class="settings-group">
+        <label class="settings-row"><span>Enable Hand ADetailer</span><span class="settings-switch"><input type="checkbox" data-toggle="hand_adetailer"><span class="knob"></span></span></label>
+        <select class="settings-model-select" data-model="hand_adetailer_model"></select>
+      </div>
+      <div class="settings-group">
+        <label class="settings-row"><span>Enable NSFW ADetailer</span><span class="settings-switch"><input type="checkbox" data-toggle="nsfw_adetailer"><span class="knob"></span></span></label>
+        <select class="settings-model-select" data-model="nsfw_adetailer_model"></select>
+      </div>
+      <div class="settings-group">
+        <label class="settings-row"><span>Enable Face ADetailer</span><span class="settings-switch"><input type="checkbox" data-toggle="face_adetailer"><span class="knob"></span></span></label>
+        <select class="settings-model-select" data-model="face_adetailer_model"></select>
+      </div>
+      <div class="settings-group">
+        <label class="settings-row"><span>Enable Eyes ADetailer</span><span class="settings-switch"><input type="checkbox" data-toggle="eyes_adetailer"><span class="knob"></span></span></label>
+        <select class="settings-model-select" data-model="eyes_adetailer_model"></select>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/app.js?v=18"></script>
 </body>
 </html>

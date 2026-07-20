@@ -2,7 +2,7 @@ import json
 import sqlite3
 from contextlib import contextmanager
 
-from . import config
+from . import config, workflow_builder
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS generations (
@@ -30,7 +30,39 @@ CREATE TABLE IF NOT EXISTS projects (
     name TEXT PRIMARY KEY,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 """
+
+# Workflow feature-toggle defaults, matching what's already baked into
+# Standard_V37.api.json today (CLIP Skip / Use SAMLoader active, rest bypassed).
+FEATURE_TOGGLE_DEFAULTS = {
+    "clip_skip": True,
+    "use_samloader": True,
+    "color_match": False,
+    "hiresfix_pre": False,
+    "hiresfix_post": False,
+    "vpred_model": False,
+    "epsilon_scaling": False,
+    "cfg_zero_star": False,
+    "seperate_vae": False,
+    "contrast": False,
+    "image_morphology": False,
+    "image_quantize": False,
+    "image_sharpen": False,
+    "detailer": False,
+    "hand_adetailer": False,
+    "nsfw_adetailer": False,
+    "face_adetailer": True,
+    "eyes_adetailer": False,
+}
+
+# Detector model_name per ADetailer group — installed .pt files vary per
+# machine, so these are exposed as dropdowns instead of hardcoded.
+ALL_SETTINGS_DEFAULTS = {**FEATURE_TOGGLE_DEFAULTS, **workflow_builder.DETECTOR_MODEL_DEFAULTS}
 
 
 @contextmanager
@@ -151,4 +183,23 @@ def create_project(name: str):
         conn.execute(
             "INSERT OR IGNORE INTO projects (name, created_at) VALUES (?, datetime('now'))",
             (name,),
+        )
+
+
+def get_settings() -> dict:
+    with get_conn() as conn:
+        rows = conn.execute("SELECT key, value FROM settings").fetchall()
+    settings = dict(ALL_SETTINGS_DEFAULTS)
+    for row in rows:
+        if row["key"] in settings:
+            settings[row["key"]] = json.loads(row["value"])
+    return settings
+
+
+def set_setting(key: str, value):
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, json.dumps(value)),
         )

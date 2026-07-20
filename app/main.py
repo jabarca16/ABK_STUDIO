@@ -149,6 +149,15 @@ async def api_sampling():
         raise HTTPException(502, f"No se pudo consultar ComfyUI: {exc}")
 
 
+@app.get("/api/library/detector-models")
+async def api_detector_models():
+    try:
+        info = await comfy_client.get_object_info("UltralyticsDetectorProvider")
+        return info["UltralyticsDetectorProvider"]["input"]["required"]["model_name"][0]
+    except Exception as exc:
+        raise HTTPException(502, f"No se pudo consultar ComfyUI: {exc}")
+
+
 # ---------- projects ----------
 
 @app.get("/api/projects")
@@ -165,13 +174,28 @@ def api_create_project(req: NewProjectRequest):
     return {"name": name}
 
 
+# ---------- settings ----------
+
+@app.get("/api/settings")
+def api_get_settings():
+    return db.get_settings()
+
+
+@app.post("/api/settings")
+def api_set_settings(req: dict):
+    for key, value in req.items():
+        if key in db.ALL_SETTINGS_DEFAULTS:
+            db.set_setting(key, value)
+    return db.get_settings()
+
+
 # ---------- generation ----------
 
 @app.post("/api/generate")
 async def api_generate(req: GenerateRequest):
     params = req.model_dump()
     params["loras"] = [l for l in params["loras"]]
-    graph, resolved_seed = workflow_builder.build_prompt_graph(params)
+    graph, resolved_seed = workflow_builder.build_prompt_graph(params, db.get_settings())
 
     client_id = str(uuid.uuid4())
     try:

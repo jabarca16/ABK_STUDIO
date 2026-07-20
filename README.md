@@ -49,6 +49,7 @@ If the IDs of the nodes the app edits also change (prompt, LoRA, seed, size, che
 ## Known issues
 
 - **Diffusion-model-only (DM) files aren't supported yet.** The checkpoint gallery only shows models LoRA Manager reports as `sub_type: "checkpoint"` (full unet+clip+vae bundles), since the fixed `Standard_V37` workflow loads checkpoints through a single `CheckpointLoaderSimple` node. Models distributed as a bare diffusion model (e.g. some Anima releases) need a separate `UNETLoader` + `CLIPLoader`/`DualCLIPLoader` + `VAELoader` chain instead, which the workflow doesn't branch into yet. They're intentionally filtered out rather than shown broken.
+- **Workflow toggles (⚙ menu) need a review pass.** The new feature toggles (CLIP Skip, Use SAMLoader, Color Match, HiresFix Pre/Post, VPred Model, Epsilon Scaling, CFGZeroStar, Separate VAE, Contrast, Image Morphology/Quantize/Sharpen, Detailer, and the Hand/NSFW/Face/Eyes ADetailer groups) rewire `Standard_V37`'s bypassed rgthree groups in `app/workflow_builder.py` by hand. The Face ADetailer group's widget layout was extracted from the live node already baked into `Standard_V37.api.json`; the Hand/NSFW/Eyes ADetailer groups reuse that same layout with only their detector model and prompt swapped, so they haven't each been individually verified against ComfyUI. Test every toggle end to end (alone and combined) before relying on them in production.
 
 Main
 <img width="1456" height="1270" alt="image" src="https://github.com/user-attachments/assets/6901862d-cd8d-477e-ac15-09bb33a7106c" />

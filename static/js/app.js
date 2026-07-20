@@ -509,6 +509,64 @@ document.getElementById('loraModalBackdrop').addEventListener('click', (e) => {
 });
 document.getElementById('loraSearch').addEventListener('input', e => renderLoraGrid(e.target.value));
 
+// ---- workflow feature toggles ----
+let DETECTOR_MODELS = null;
+
+document.getElementById('openSettingsModal').addEventListener('click', async () => {
+  document.getElementById('settingsModalBackdrop').classList.add('open');
+  try {
+    if (!DETECTOR_MODELS) DETECTOR_MODELS = await api('/api/library/detector-models');
+    const settings = await api('/api/settings');
+    document.querySelectorAll('#settingsList input[data-toggle]').forEach(input => {
+      input.checked = !!settings[input.dataset.toggle];
+    });
+    document.querySelectorAll('#settingsList select[data-model]').forEach(select => {
+      const current = settings[select.dataset.model];
+      select.innerHTML = DETECTOR_MODELS.map(m =>
+        `<option value="${m}" ${m === current ? 'selected' : ''}>${m}</option>`
+      ).join('');
+      if (current && !DETECTOR_MODELS.includes(current)) {
+        select.insertAdjacentHTML('afterbegin', `<option value="${current}" selected>${current} (no instalado)</option>`);
+      }
+    });
+  } catch (e) {
+    showToast('No se pudieron cargar los ajustes: ' + e.message, true);
+  }
+});
+document.getElementById('closeSettingsModal').addEventListener('click', () => {
+  document.getElementById('settingsModalBackdrop').classList.remove('open');
+});
+document.getElementById('settingsModalBackdrop').addEventListener('click', (e) => {
+  if (e.target.id === 'settingsModalBackdrop') e.target.classList.remove('open');
+});
+document.querySelectorAll('#settingsList input[data-toggle]').forEach(input => {
+  input.addEventListener('change', async () => {
+    try {
+      await api('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [input.dataset.toggle]: input.checked }),
+      });
+    } catch (e) {
+      input.checked = !input.checked;
+      showToast('No se pudo guardar el ajuste: ' + e.message, true);
+    }
+  });
+});
+document.querySelectorAll('#settingsList select[data-model]').forEach(select => {
+  select.addEventListener('change', async () => {
+    try {
+      await api('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [select.dataset.model]: select.value }),
+      });
+    } catch (e) {
+      showToast('No se pudo guardar el modelo: ' + e.message, true);
+    }
+  });
+});
+
 document.getElementById('syncLoras').addEventListener('click', async (e) => {
   const btn = e.currentTarget;
   if (btn.classList.contains('spinning')) return;
@@ -875,8 +933,8 @@ async function restoreGeneration(id) {
 }
 
 // ================= FULL HISTORY BROWSER =================
-const HISTORY_PAGE_SIZE = 60;
-let historyModalScope = '__all__'; // '__all__' or a project name
+const HISTORY_PAGE_SIZE = 16;
+let historyModalScope = '(root)';
 let historyModalPage = 0;
 let historyModalRows = [];
 let modalHistoryImages = []; // flat {path, id, seed, project} for the modal's lightbox
@@ -887,7 +945,6 @@ let historyModalHasMore = false;
 function renderHistoryModalTree() {
   const el = document.getElementById('historyModalTree');
   el.innerHTML = `
-    <div class="tree-item${historyModalScope === '__all__' ? ' active' : ''}" data-project="__all__">todos los proyectos</div>
     ${PROJECTS.map(p => `<div class="tree-item${historyModalScope === p ? ' active' : ''}" data-project="${p}">${p === '(root)' ? '— root —' : p}</div>`).join('')}
   `;
   el.querySelectorAll('.tree-item').forEach(item => {
@@ -943,15 +1000,7 @@ function renderHistoryModalGrid() {
   const grid = document.getElementById('historyModalGrid');
   grid.innerHTML = '';
   modalHistoryImages = [];
-  let lastProject = null;
   historyModalRows.forEach((h) => {
-    if (historyModalScope === '__all__' && h.project !== lastProject) {
-      const header = document.createElement('div');
-      header.className = 'history-group-header';
-      header.textContent = h.project === '(root)' ? '— root —' : h.project;
-      grid.appendChild(header);
-      lastProject = h.project;
-    }
     const images = JSON.parse(h.image_paths_json || '[]');
     const startIndex = modalHistoryImages.length;
     images.forEach(p => modalHistoryImages.push({ path: p, id: h.id, seed: h.seed, project: h.project }));
