@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ABK Studio</title>
-<link rel="stylesheet" href="/static/css/style.css?v=16">
+<link rel="stylesheet" href="/static/css/style.css?v=17">
 </head>
 <body>
 
@@ -215,6 +215,11 @@
       <div class="lora-tree scrollbar-hidden" id="historyModalTree"></div>
       <div class="modal-body scrollbar-hidden" id="historyModalGrid"></div>
     </div>
+    <div class="history-pager" id="historyPager">
+      <button id="historyPagerPrev" title="Anterior" disabled>‹ anterior</button>
+      <span id="historyPagerLabel">página 1</span>
+      <button id="historyPagerNext" title="Siguiente" disabled>siguiente ›</button>
+    </div>
     <div class="history-bulk-bar" id="historyBulkBar">
       <span id="historyBulkCount">0 seleccionadas</span>
       <button id="historyBulkCancel">Cancelar</button>
@@ -239,6 +244,6 @@
   </div>
 </div>
 
-<script src="/static/js/app.js?v=15"></script>
+<script src="/static/js/app.js?v=16"></script>
 </body>
 </html>

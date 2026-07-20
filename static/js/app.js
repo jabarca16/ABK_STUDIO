@@ -877,7 +877,7 @@ async function restoreGeneration(id) {
 // ================= FULL HISTORY BROWSER =================
 const HISTORY_PAGE_SIZE = 60;
 let historyModalScope = '__all__'; // '__all__' or a project name
-let historyModalOffset = 0;
+let historyModalPage = 0;
 let historyModalRows = [];
 let modalHistoryImages = []; // flat {path, id, seed, project} for the modal's lightbox
 let historySelectMode = false;
@@ -899,31 +899,47 @@ function renderHistoryModalTree() {
   });
 }
 
-async function loadHistoryModalPage(reset) {
+async function loadHistoryModalPage(reset, page) {
   const grid = document.getElementById('historyModalGrid');
   if (reset) {
-    historyModalOffset = 0;
-    historyModalRows = [];
+    historyModalPage = 0;
+    grid.innerHTML = `<div class="empty-note">cargando…</div>`;
+  } else if (typeof page === 'number') {
+    historyModalPage = page;
     grid.innerHTML = `<div class="empty-note">cargando…</div>`;
   }
   let rows;
   try {
-    rows = await api(`/api/history?project=${encodeURIComponent(historyModalScope)}&limit=${HISTORY_PAGE_SIZE}&offset=${historyModalOffset}`);
+    rows = await api(`/api/history?project=${encodeURIComponent(historyModalScope)}&limit=${HISTORY_PAGE_SIZE}&offset=${historyModalPage * HISTORY_PAGE_SIZE}`);
   } catch (e) {
     grid.innerHTML = `<div class="empty-note">no se pudo cargar el historial</div>`;
     return;
   }
-  if (reset && !rows.length) {
+  if (!rows.length && historyModalPage > 0) {
+    historyModalPage -= 1;
+    return loadHistoryModalPage(false, historyModalPage);
+  }
+  if (!rows.length) {
     grid.innerHTML = `<div class="empty-note">sin generaciones todavía</div>`;
+    renderHistoryPager();
     return;
   }
-  historyModalRows = historyModalRows.concat(rows);
-  historyModalOffset += rows.length;
+  historyModalRows = rows;
   historyModalHasMore = rows.length === HISTORY_PAGE_SIZE;
-  renderHistoryModalGrid(historyModalHasMore);
+  renderHistoryModalGrid();
+  renderHistoryPager();
 }
 
-function renderHistoryModalGrid(hasMore) {
+function renderHistoryPager() {
+  const pager = document.getElementById('historyPager');
+  const hasRows = historyModalRows.length > 0;
+  pager.style.display = hasRows ? 'flex' : 'none';
+  document.getElementById('historyPagerLabel').textContent = `página ${historyModalPage + 1}`;
+  document.getElementById('historyPagerPrev').disabled = historyModalPage === 0;
+  document.getElementById('historyPagerNext').disabled = !historyModalHasMore;
+}
+
+function renderHistoryModalGrid() {
   const grid = document.getElementById('historyModalGrid');
   grid.innerHTML = '';
   modalHistoryImages = [];
@@ -973,13 +989,6 @@ function renderHistoryModalGrid(hasMore) {
     });
     grid.appendChild(item);
   });
-  if (hasMore) {
-    const more = document.createElement('button');
-    more.className = 'history-loadmore';
-    more.textContent = 'Cargar más';
-    more.addEventListener('click', () => loadHistoryModalPage(false));
-    grid.appendChild(more);
-  }
 }
 
 function toggleHistorySelection(id, itemEl) {
@@ -1005,7 +1014,7 @@ function setHistorySelectMode(on) {
   historySelectedIds.clear();
   document.getElementById('historyModalGrid').classList.toggle('select-mode', on);
   document.getElementById('historySelectToggle').classList.toggle('active', on);
-  renderHistoryModalGrid(historyModalHasMore);
+  renderHistoryModalGrid();
   renderHistoryBulkBar();
 }
 
@@ -1043,6 +1052,12 @@ function closeHistoryModal() {
   document.getElementById('historyModalBackdrop').classList.remove('open');
 }
 document.getElementById('openHistoryModal').addEventListener('click', openHistoryModal);
+document.getElementById('historyPagerPrev').addEventListener('click', () => {
+  if (historyModalPage > 0) loadHistoryModalPage(false, historyModalPage - 1);
+});
+document.getElementById('historyPagerNext').addEventListener('click', () => {
+  if (historyModalHasMore) loadHistoryModalPage(false, historyModalPage + 1);
+});
 document.getElementById('closeHistoryModal').addEventListener('click', closeHistoryModal);
 document.getElementById('historyModalBackdrop').addEventListener('click', (e) => {
   if (e.target.id === 'historyModalBackdrop') closeHistoryModal();
