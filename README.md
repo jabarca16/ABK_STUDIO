@@ -46,6 +46,10 @@ If you change the `Standard_V37` graph inside ComfyUI (new node, rewiring, etc.)
 
 If the IDs of the nodes the app edits also change (prompt, LoRA, seed, size, checkpoint, sampling, save path), you need to update the `NODE_*` constants in `app/workflow_builder.py` to point to the new IDs.
 
+## Known issues
+
+- **Diffusion-model-only (DM) files aren't supported yet.** The checkpoint gallery only shows models LoRA Manager reports as `sub_type: "checkpoint"` (full unet+clip+vae bundles), since the fixed `Standard_V37` workflow loads checkpoints through a single `CheckpointLoaderSimple` node. Models distributed as a bare diffusion model (e.g. some Anima releases) need a separate `UNETLoader` + `CLIPLoader`/`DualCLIPLoader` + `VAELoader` chain instead, which the workflow doesn't branch into yet. They're intentionally filtered out rather than shown broken.
+
 Main
 <img width="1456" height="1270" alt="image" src="https://github.com/user-attachments/assets/6901862d-cd8d-477e-ac15-09bb33a7106c" />
 
