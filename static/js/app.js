@@ -461,7 +461,10 @@ function renderLoraGrid(filter = '') {
     grid.innerHTML = `<div class="empty-note">sin resultados</div>`;
     return;
   }
-  filtered.sort((a, b) => loraCompatible(a) === loraCompatible(b) ? 0 : (loraCompatible(a) ? -1 : 1));
+  filtered.sort((a, b) => {
+    if (!!a.favorite !== !!b.favorite) return a.favorite ? -1 : 1;
+    return loraCompatible(a) === loraCompatible(b) ? 0 : (loraCompatible(a) ? -1 : 1);
+  });
   filtered.forEach(l => {
     const isSelected = loraStack.some(s => s.name === l.name);
     const compatible = loraCompatible(l);
@@ -470,6 +473,7 @@ function renderLoraGrid(filter = '') {
     card.innerHTML = `
       <div class="art-wrap">
         ${loraThumbHtml(l, 'art')}
+        <button class="lora-fav-btn${l.favorite ? ' active' : ''}" title="${l.favorite ? 'Quitar de favoritos' : 'Marcar como favorito'}">${l.favorite ? '★' : '☆'}</button>
         <div class="art-caption">${l.base_model || 'base model desconocido'}</div>
       </div>
       <div class="info">
@@ -486,6 +490,21 @@ function renderLoraGrid(filter = '') {
       }
       renderLoraStack();
       renderLoraGrid(document.getElementById('loraSearch').value);
+    });
+    card.querySelector('.lora-fav-btn').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const nextFavorite = !l.favorite;
+      try {
+        await api('/api/library/loras/favorite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: l.name, favorite: nextFavorite }),
+        });
+        l.favorite = nextFavorite;
+        renderLoraGrid(document.getElementById('loraSearch').value);
+      } catch (err) {
+        showToast('No se pudo actualizar favorito: ' + err.message, true);
+      }
     });
     grid.appendChild(card);
   });
@@ -509,8 +528,18 @@ document.getElementById('loraModalBackdrop').addEventListener('click', (e) => {
 });
 document.getElementById('loraSearch').addEventListener('input', e => renderLoraGrid(e.target.value));
 
-// ---- workflow feature toggles ----
+// ---- settings modal (general + workflow tabs) ----
 let DETECTOR_MODELS = null;
+let OLLAMA_MODELS = null;
+
+document.querySelectorAll('.settings-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.settings-tab').forEach(t => t.classList.toggle('active', t === tab));
+    document.querySelectorAll('.settings-panel').forEach(p => {
+      p.style.display = p.dataset.panel === tab.dataset.panel ? '' : 'none';
+    });
+  });
+});
 
 document.getElementById('openSettingsModal').addEventListener('click', async () => {
   document.getElementById('settingsModalBackdrop').classList.add('open');
@@ -520,7 +549,7 @@ document.getElementById('openSettingsModal').addEventListener('click', async () 
     document.querySelectorAll('#settingsList input[data-toggle]').forEach(input => {
       input.checked = !!settings[input.dataset.toggle];
     });
-    document.querySelectorAll('#settingsList select[data-model]').forEach(select => {
+    document.querySelectorAll('[data-panel="workflow"] select[data-model]').forEach(select => {
       const current = settings[select.dataset.model];
       select.innerHTML = DETECTOR_MODELS.map(m =>
         `<option value="${m}" ${m === current ? 'selected' : ''}>${m}</option>`
@@ -529,6 +558,19 @@ document.getElementById('openSettingsModal').addEventListener('click', async () 
         select.insertAdjacentHTML('afterbegin', `<option value="${current}" selected>${current} (no instalado)</option>`);
       }
     });
+    try {
+      if (!OLLAMA_MODELS) OLLAMA_MODELS = await api('/api/library/ollama-models');
+      const select = document.getElementById('ollamaModelSelect');
+      const current = settings.ollama_model;
+      select.innerHTML = OLLAMA_MODELS.map(m =>
+        `<option value="${m}" ${m === current ? 'selected' : ''}>${m}</option>`
+      ).join('');
+      if (current && !OLLAMA_MODELS.includes(current)) {
+        select.insertAdjacentHTML('afterbegin', `<option value="${current}" selected>${current} (no instalado)</option>`);
+      }
+    } catch (e) {
+      showToast('No se pudo conectar con Ollama: ' + e.message, true);
+    }
   } catch (e) {
     showToast('No se pudieron cargar los ajustes: ' + e.message, true);
   }
@@ -787,6 +829,54 @@ document.getElementById('clearAllBtn').addEventListener('click', () => {
     document.getElementById('seedMeta').textContent = -1;
   }
   showToast('Prompt y LoRA limpiados');
+});
+
+// ================= PROMPT TEMPLATE =================
+const PROMPT_TEMPLATE = [
+  'masterpiece, best quality, very aesthetic, absurdres,',
+  '[1girl / 1boy / solo / 2girls / ...],',
+  '[hair],',
+  '[eyes],',
+  '[outfit, body features],',
+  '[pose / action or interaction clause],',
+  '[background, setting, lighting],',
+  '[camera, composition],',
+  '[rating: safe / sensitive / nsfw / explicit]',
+].join('\n');
+document.getElementById('templatePromptBtn').addEventListener('click', () => {
+  const field = document.getElementById('positive');
+  if (field.value.trim() && !confirm('Esto reemplaza el texto actual del Positive con la plantilla. ¿Continuar?')) {
+    return;
+  }
+  field.value = PROMPT_TEMPLATE;
+  field.focus();
+  showToast('Plantilla insertada — completá cada [placeholder]');
+});
+
+// ================= ENHANCE PROMPT (Ollama) =================
+document.getElementById('enhancePromptBtn').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  if (btn.classList.contains('spinning')) return;
+  const field = document.getElementById('positive');
+  const current = field.value.trim();
+  if (!current) {
+    showToast('Escribí algo en Positive primero', true);
+    return;
+  }
+  btn.classList.add('spinning');
+  try {
+    const res = await api('/api/enhance-prompt', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: current }),
+    });
+    field.value = res.prompt;
+    showToast('Prompt mejorado con IA');
+  } catch (err) {
+    showToast('No se pudo mejorar el prompt: ' + err.message, true);
+  } finally {
+    btn.classList.remove('spinning');
+  }
 });
 
 // ================= HISTORY =================

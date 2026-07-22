@@ -17,3 +17,6 @@ DB_PATH = PROJECT_ROOT / "data" / "abkstudio.sqlite3"
 STATIC_DIR = PROJECT_ROOT / "static"
 
 MAX_BATCH_SIZE = 4
+
+OLLAMA_BASE_URL = "http://localhost:11434"
+OLLAMA_MODEL = "llama3.1:8b"

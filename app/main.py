@@ -2,12 +2,19 @@ import asyncio
 import json
 import uuid
 
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import comfy_client, config, db, library, workflow_builder
-from .schemas import DeleteHistoryRequest, GenerateRequest, NewProjectRequest
+from . import comfy_client, config, db, library, ollama_client, workflow_builder
+from .schemas import (
+    DeleteHistoryRequest,
+    EnhancePromptRequest,
+    GenerateRequest,
+    LoraFavoriteRequest,
+    NewProjectRequest,
+)
 
 app = FastAPI(title="ABK Studio")
 
@@ -117,9 +124,15 @@ async def api_checkpoints():
 @app.get("/api/library/loras")
 async def api_loras():
     try:
-        return await library.get_loras()
+        return await library.get_loras(db.get_favorite_loras())
     except Exception as exc:
         raise HTTPException(502, f"No se pudo consultar LoRA Manager: {exc}")
+
+
+@app.post("/api/library/loras/favorite")
+def api_toggle_lora_favorite(req: LoraFavoriteRequest):
+    db.set_lora_favorite(req.name, req.favorite)
+    return {"favorites": sorted(db.get_favorite_loras())}
 
 
 @app.get("/api/library/checkpoint-gallery")
@@ -158,6 +171,14 @@ async def api_detector_models():
         raise HTTPException(502, f"No se pudo consultar ComfyUI: {exc}")
 
 
+@app.get("/api/library/ollama-models")
+async def api_ollama_models():
+    try:
+        return await ollama_client.list_models()
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, f"Ollama unreachable: {exc}")
+
+
 # ---------- projects ----------
 
 @app.get("/api/projects")
@@ -187,6 +208,20 @@ def api_set_settings(req: dict):
         if key in db.ALL_SETTINGS_DEFAULTS:
             db.set_setting(key, value)
     return db.get_settings()
+
+
+# ---------- prompt enhancement ----------
+
+@app.post("/api/enhance-prompt")
+async def api_enhance_prompt(req: EnhancePromptRequest):
+    if not req.prompt.strip():
+        raise HTTPException(400, "Prompt is empty")
+    try:
+        model = db.get_settings().get("ollama_model")
+        enhanced = await ollama_client.enhance_prompt(req.prompt, model)
+    except httpx.HTTPError as e:
+        raise HTTPException(502, f"Ollama unreachable: {e}")
+    return {"prompt": enhanced}
 
 
 # ---------- generation ----------

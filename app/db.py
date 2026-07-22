@@ -35,6 +35,10 @@ CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS lora_favorites (
+    name TEXT PRIMARY KEY
+);
 """
 
 # Workflow feature-toggle defaults, matching what's already baked into
@@ -62,7 +66,15 @@ FEATURE_TOGGLE_DEFAULTS = {
 
 # Detector model_name per ADetailer group — installed .pt files vary per
 # machine, so these are exposed as dropdowns instead of hardcoded.
-ALL_SETTINGS_DEFAULTS = {**FEATURE_TOGGLE_DEFAULTS, **workflow_builder.DETECTOR_MODEL_DEFAULTS}
+GENERAL_SETTINGS_DEFAULTS = {
+    "ollama_model": config.OLLAMA_MODEL,
+}
+
+ALL_SETTINGS_DEFAULTS = {
+    **FEATURE_TOGGLE_DEFAULTS,
+    **workflow_builder.DETECTOR_MODEL_DEFAULTS,
+    **GENERAL_SETTINGS_DEFAULTS,
+}
 
 
 @contextmanager
@@ -203,3 +215,17 @@ def set_setting(key: str, value):
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             (key, json.dumps(value)),
         )
+
+
+def get_favorite_loras() -> set[str]:
+    with get_conn() as conn:
+        rows = conn.execute("SELECT name FROM lora_favorites").fetchall()
+        return {r["name"] for r in rows}
+
+
+def set_lora_favorite(name: str, favorite: bool):
+    with get_conn() as conn:
+        if favorite:
+            conn.execute("INSERT OR IGNORE INTO lora_favorites (name) VALUES (?)", (name,))
+        else:
+            conn.execute("DELETE FROM lora_favorites WHERE name = ?", (name,))

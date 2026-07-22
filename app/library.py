@@ -34,7 +34,8 @@ def _preview_fields(item: dict) -> dict:
     }
 
 
-async def get_loras() -> list[dict]:
+async def get_loras(favorites: set[str] | None = None) -> list[dict]:
+    favorites = favorites or set()
     raw_items = await comfy_client.get_lora_manager_list()
     loras = []
     for item in raw_items:
@@ -49,6 +50,7 @@ async def get_loras() -> list[dict]:
                 "tags": item.get("tags") or [],
                 **_preview_fields(item),
                 "suggested_strength": _suggested_strength(item.get("usage_tips", "")),
+                "favorite": item["file_name"] in favorites,
             }
         )
     return loras

@@ -28,3 +28,12 @@ class NewProjectRequest(BaseModel):
 
 class DeleteHistoryRequest(BaseModel):
     ids: list[str]
+
+
+class EnhancePromptRequest(BaseModel):
+    prompt: str
+
+
+class LoraFavoriteRequest(BaseModel):
+    name: str
+    favorite: bool

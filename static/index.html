@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ABK Studio</title>
-<link rel="stylesheet" href="/static/css/style.css?v=20">
+<link rel="stylesheet" href="/static/css/style.css?v=22">
 </head>
 <body>
 
@@ -47,7 +47,7 @@
     <div class="pane-body">
 
       <div>
-        <label class="field-label">Positive <span class="hint">📝 POSITIVE</span></label>
+        <label class="field-label">Positive <span style="display:flex; align-items:center; gap:8px;"><span class="hint">📝 POSITIVE</span><button class="sync-btn" id="templatePromptBtn" type="button" title="Insertar plantilla de estructura">🧩</button><button class="sync-btn" id="enhancePromptBtn" type="button" title="Pulir prompt con IA (Ollama) — reordena y limpia sin inventar contenido">✨</button></span></label>
         <textarea id="positive"></textarea>
       </div>
 
@@ -73,7 +73,7 @@
       <button class="generate-btn" id="generateBtn"><span class="bolt">▶</span> Generate</button>
       <div class="batch-count">Batch <input type="number" id="batchSize" value="1" min="1" max="4" step="1"> <span class="hint-inline">1–4</span></div>
       <div class="spacer"></div>
-      <button class="sync-btn" id="openSettingsModal" title="Workflow feature toggles">⚙</button>
+      <button class="sync-btn" id="openSettingsModal" title="Configuración">⚙</button>
       <div class="queue-info" id="queueInfo">queue — idle</div>
     </div>
 
@@ -245,14 +245,25 @@
   </div>
 </div>
 
-<!-- Workflow feature toggles modal -->
+<!-- Settings modal -->
 <div class="modal-backdrop" id="settingsModalBackdrop">
   <div class="modal settings-modal">
     <div class="modal-head">
-      <h3>Workflow toggles</h3>
+      <h3>Configuración</h3>
       <button class="modal-close" id="closeSettingsModal">×</button>
     </div>
+    <div class="settings-tabs">
+      <button class="settings-tab active" data-panel="general">General</button>
+      <button class="settings-tab" data-panel="workflow">Workflow</button>
+    </div>
     <div class="settings-list" id="settingsList">
+      <div class="settings-panel" data-panel="general">
+        <div class="settings-group">
+          <label class="settings-row" style="cursor:default;"><span>Modelo de IA (Ollama)</span></label>
+          <select class="settings-model-select" id="ollamaModelSelect" data-model="ollama_model"></select>
+        </div>
+      </div>
+      <div class="settings-panel" data-panel="workflow" style="display:none;">
       <label class="settings-row"><span>Enable CLIP Skip</span><span class="settings-switch"><input type="checkbox" data-toggle="clip_skip"><span class="knob"></span></span></label>
       <label class="settings-row"><span>Enable Use SAMLoader</span><span class="settings-switch"><input type="checkbox" data-toggle="use_samloader"><span class="knob"></span></span></label>
       <label class="settings-row"><span>Enable Color Match</span><span class="settings-switch"><input type="checkbox" data-toggle="color_match"><span class="knob"></span></span></label>
@@ -285,10 +296,11 @@
         <label class="settings-row"><span>Enable Eyes ADetailer</span><span class="settings-switch"><input type="checkbox" data-toggle="eyes_adetailer"><span class="knob"></span></span></label>
         <select class="settings-model-select" data-model="eyes_adetailer_model"></select>
       </div>
+      </div>
     </div>
   </div>
 </div>
 
-<script src="/static/js/app.js?v=18"></script>
+<script src="/static/js/app.js?v=23"></script>
 </body>
 </html>
