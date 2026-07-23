@@ -285,11 +285,26 @@ function findLora(name) {
   return LORA_LIBRARY.find(l => l.name === name);
 }
 
+// LoRA Manager / Model Manager report base_model as free-text civitai labels
+// (e.g. "SDXL 1.0", "Illustrious", "Pony", "NoobAI"). Those are all finetunes
+// of the same SDXL architecture and their LoRAs are cross-compatible in
+// practice, so compatibility is checked by architecture family, not exact
+// string match.
+function baseModelFamily(name) {
+  if (!name) return '';
+  const s = name.toLowerCase();
+  if (/pony|illustrious|noobai|animagine|sdxl/.test(s)) return 'sdxl';
+  if (/\bsd\s*1\.[45]\b|sd15/.test(s)) return 'sd15';
+  if (/flux/.test(s)) return 'flux';
+  if (/\bsd\s*3(\.5)?\b/.test(s)) return 'sd3';
+  return s.trim();
+}
+
 function loraCompatible(lib) {
   if (!lib || !lib.base_model) return true;
   const ckpt = findCkpt(document.getElementById('checkpoint').value);
   if (!ckpt || !ckpt.base_model) return true;
-  return ckpt.base_model === lib.base_model;
+  return baseModelFamily(ckpt.base_model) === baseModelFamily(lib.base_model);
 }
 
 function loraThumbHtml(lib, className) {
@@ -819,9 +834,10 @@ document.getElementById('seed').addEventListener('input', e => {
 });
 
 // ================= CLEAR ALL =================
+const DEFAULT_NEGATIVE_PROMPT = 'lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry';
 document.getElementById('clearAllBtn').addEventListener('click', () => {
   document.getElementById('positive').value = '';
-  document.getElementById('negative').value = '';
+  document.getElementById('negative').value = DEFAULT_NEGATIVE_PROMPT;
   loraStack = [];
   renderLoraStack();
   if (!seedLocked) {
@@ -829,28 +845,6 @@ document.getElementById('clearAllBtn').addEventListener('click', () => {
     document.getElementById('seedMeta').textContent = -1;
   }
   showToast('Prompt y LoRA limpiados');
-});
-
-// ================= PROMPT TEMPLATE =================
-const PROMPT_TEMPLATE = [
-  'masterpiece, best quality, very aesthetic, absurdres,',
-  '[1girl / 1boy / solo / 2girls / ...],',
-  '[hair],',
-  '[eyes],',
-  '[outfit, body features],',
-  '[pose / action or interaction clause],',
-  '[background, setting, lighting],',
-  '[camera, composition],',
-  '[rating: safe / sensitive / nsfw / explicit]',
-].join('\n');
-document.getElementById('templatePromptBtn').addEventListener('click', () => {
-  const field = document.getElementById('positive');
-  if (field.value.trim() && !confirm('Esto reemplaza el texto actual del Positive con la plantilla. ¿Continuar?')) {
-    return;
-  }
-  field.value = PROMPT_TEMPLATE;
-  field.focus();
-  showToast('Plantilla insertada — completá cada [placeholder]');
 });
 
 // ================= ENHANCE PROMPT (Ollama) =================
