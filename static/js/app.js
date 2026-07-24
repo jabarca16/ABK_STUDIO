@@ -207,73 +207,28 @@ function pathFor(project) {
   return project === '(root)' ? 'output/' : `output/${project}/`;
 }
 
-function renderProjectSelect() {
-  const sel = document.getElementById('projectSelect');
-  sel.innerHTML = '';
-  PROJECTS.forEach(p => {
-    const opt = document.createElement('option');
-    opt.value = p;
-    opt.textContent = p === '(root)' ? '— root (sin proyecto) —' : p;
-    if (p === currentProject) opt.selected = true;
-    sel.appendChild(opt);
-  });
+function updateProjectCurrentDisplay() {
+  document.getElementById('projectCurrentName').textContent =
+    currentProject === '(root)' ? '— root —' : currentProject;
   document.getElementById('pathMeta').textContent = pathFor(currentProject);
 }
 
 async function loadProjects() {
   try {
     PROJECTS = await api('/api/projects');
+    PROJECTS.sort((a, b) => {
+      if (a === '(root)') return -1;
+      if (b === '(root)') return 1;
+      return a.localeCompare(b, undefined, { sensitivity: 'base' });
+    });
     if (!PROJECTS.includes(currentProject)) currentProject = '(root)';
-    renderProjectSelect();
+    updateProjectCurrentDisplay();
   } catch (e) {
     showToast('No se pudieron cargar los proyectos: ' + e.message, true);
   }
 }
 
-document.getElementById('projectSelect').addEventListener('change', e => {
-  currentProject = e.target.value;
-  document.getElementById('pathMeta').textContent = pathFor(currentProject);
-  renderHistoryFilter();
-  loadHistory();
-});
-
-const newProjectRow = document.getElementById('projectNewRow');
-const newProjectWrap = document.getElementById('projectSelectWrap');
-document.getElementById('newProjectBtn').addEventListener('click', () => {
-  newProjectRow.classList.add('open');
-  newProjectWrap.style.display = 'none';
-  document.getElementById('newProjectInput').focus();
-});
-function closeNewProjectRow() {
-  newProjectRow.classList.remove('open');
-  newProjectWrap.style.display = 'flex';
-  document.getElementById('newProjectInput').value = '';
-}
-document.getElementById('cancelNewProject').addEventListener('click', closeNewProjectRow);
-async function confirmNewProject() {
-  const input = document.getElementById('newProjectInput');
-  const name = input.value.trim();
-  if (!name) { closeNewProjectRow(); return; }
-  try {
-    const created = await api('/api/projects', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    });
-    currentProject = created.name;
-    await loadProjects();
-    renderHistoryFilter();
-    loadHistory();
-  } catch (e) {
-    showToast('No se pudo crear el proyecto: ' + e.message, true);
-  }
-  closeNewProjectRow();
-}
-document.getElementById('confirmNewProject').addEventListener('click', confirmNewProject);
-document.getElementById('newProjectInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter') confirmNewProject();
-  if (e.key === 'Escape') closeNewProjectRow();
-});
+document.getElementById('openProjectModal').addEventListener('click', openProjectModal);
 
 // ================= LORA LIBRARY =================
 let LORA_LIBRARY = [];
@@ -873,24 +828,9 @@ document.getElementById('enhancePromptBtn').addEventListener('click', async (e) 
   }
 });
 
-// ================= HISTORY =================
-let historyScope = 'current';
-let historyImages = []; // flat {path, id, seed, project} across all rows currently loaded
-function renderHistoryFilter() {
-  const el = document.getElementById('historyFilter');
-  el.innerHTML = `
-    <span class="chip ${historyScope === 'current' ? 'active' : ''}" data-scope="current">${currentProject}</span>
-    <span class="chip ${historyScope === 'all' ? 'active' : ''}" data-scope="all">todos los proyectos</span>
-  `;
-  el.querySelectorAll('.chip').forEach(c => {
-    c.addEventListener('click', () => {
-      historyScope = c.dataset.scope;
-      renderHistoryFilter();
-      loadHistory();
-    });
-  });
-}
-renderHistoryFilter();
+// ================= HISTORY / FILMSTRIP =================
+let currentGenId = null;
+let filmstripRows = [];
 
 document.getElementById('syncHistoryBtn').addEventListener('click', async (e) => {
   const btn = e.currentTarget;
@@ -899,6 +839,9 @@ document.getElementById('syncHistoryBtn').addEventListener('click', async (e) =>
     const res = await api('/api/history/sync', { method: 'POST' });
     showToast(`Sincronizado: ${res.updated} actualizadas, ${res.deleted} eliminadas`);
     loadHistory();
+    if (document.getElementById('historyModalBackdrop').classList.contains('open')) {
+      loadHistoryModalPage(true);
+    }
   } catch (err) {
     showToast('No se pudo sincronizar: ' + err.message, true);
   } finally {
@@ -911,54 +854,57 @@ function outputUrl(relPath) {
 }
 
 async function loadHistory() {
-  const grid = document.getElementById('historyGrid');
-  const scopeParam = historyScope === 'all' ? '__all__' : currentProject;
+  const track = document.getElementById('filmstripTrack');
   let rows;
   try {
-    rows = await api(`/api/history?project=${encodeURIComponent(scopeParam)}&limit=4`);
+    rows = await api(`/api/history?project=${encodeURIComponent(currentProject)}&limit=30`);
   } catch (e) {
-    grid.innerHTML = `<div class="empty-note">no se pudo cargar el historial</div>`;
+    track.innerHTML = `<div class="empty-note">no se pudo cargar el historial</div>`;
     return;
   }
-  if (!rows.length) {
-    grid.innerHTML = `<div class="empty-note">sin generaciones todavía en «${currentProject}»</div>`;
+  filmstripRows = rows;
+  renderFilmstrip();
+}
+
+function renderFilmstrip() {
+  const track = document.getElementById('filmstripTrack');
+  if (!filmstripRows.length) {
+    track.innerHTML = `<div class="empty-note">sin generaciones todavía en «${currentProject}»</div>`;
     return;
   }
-  grid.innerHTML = '';
-  historyImages = [];
-  rows.forEach((h, i) => {
+  track.innerHTML = '';
+  filmstripRows.forEach((h) => {
     const images = JSON.parse(h.image_paths_json || '[]');
-    const startIndex = historyImages.length;
-    images.forEach(p => historyImages.push({ path: p, id: h.id, seed: h.seed, project: h.project }));
     const item = document.createElement('div');
-    item.className = 'history-item' + (h.status !== 'done' ? ' pending' : '');
-    if (images.length) {
-      item.style.backgroundImage = `url('${outputUrl(images[0])}')`;
-    }
+    item.className = 'filmstrip-item' + (h.status !== 'done' ? ' pending' : '') + (h.id === currentGenId ? ' active' : '');
+    if (images.length) item.style.backgroundImage = `url('${outputUrl(images[0])}')`;
+    item.title = `seed ${h.seed}`;
     item.innerHTML = `
-      <span class="frame-no">${historyScope === 'all' ? h.project : '#' + String(rows.length - i).padStart(3, '0')}</span>
-      ${images.length > 1 ? `<span class="img-count">1/${images.length}</span>` : ''}
-      ${images.length ? `<button class="expand-btn" title="Ver imágenes">⤢</button>` : ''}
+      ${images.length > 1 ? `<span class="img-count">${images.length}</span>` : ''}
       ${(h.status === 'queued' || h.status === 'running') ? `<span class="pending-icon">⟳</span>` : ''}
-      <div class="badge">
-        <span>seed ${String(h.seed).slice(0, 8)}</span><span>${h.status}</span>
-        <button class="delete-btn" title="Eliminar">🗑</button>
-      </div>
+      <button class="delete-btn" title="Eliminar">🗑</button>
     `;
     item.addEventListener('click', () => restoreGeneration(h.id));
-    if (images.length) {
-      item.querySelector('.expand-btn').addEventListener('click', (e) => {
-        e.stopPropagation();
-        openLightbox(historyImages.map(x => x.path), startIndex, historyImages);
-      });
-    }
     item.querySelector('.delete-btn').addEventListener('click', (e) => {
       e.stopPropagation();
       deleteSingleGeneration(h.id, loadHistory);
     });
-    grid.appendChild(item);
+    track.appendChild(item);
   });
 }
+
+document.getElementById('filmstripPrev').addEventListener('click', () => {
+  if (!filmstripRows.length) return;
+  const idx = filmstripRows.findIndex(r => r.id === currentGenId);
+  const nextIdx = idx === -1 ? 0 : Math.max(idx - 1, 0);
+  restoreGeneration(filmstripRows[nextIdx].id);
+});
+document.getElementById('filmstripNext').addEventListener('click', () => {
+  if (!filmstripRows.length) return;
+  const idx = filmstripRows.findIndex(r => r.id === currentGenId);
+  const nextIdx = idx === -1 ? 0 : Math.min(idx + 1, filmstripRows.length - 1);
+  restoreGeneration(filmstripRows[nextIdx].id);
+});
 
 async function deleteSingleGeneration(id, onDeleted) {
   if (!confirm('¿Eliminar esta generación? Se borra también la imagen del disco. Esta acción no se puede deshacer.')) return;
@@ -974,6 +920,7 @@ async function deleteSingleGeneration(id, onDeleted) {
 async function restoreGeneration(id) {
   try {
     const g = await api(`/api/generation/${id}`);
+    currentGenId = id;
     document.getElementById('positive').value = g.positive_prompt || '';
     document.getElementById('negative').value = g.negative_prompt || '';
     document.getElementById('seed').value = seedLocked ? g.seed : -1;
@@ -1003,10 +950,12 @@ async function restoreGeneration(id) {
       const lib = findLora(s.name);
       if (lib && lib.triggers.length) addTriggerWordToPositive(lib.triggers[0], { silent: true });
     });
-    if (PROJECTS.includes(g.project)) {
+    if (PROJECTS.includes(g.project) && g.project !== currentProject) {
       currentProject = g.project;
-      renderProjectSelect();
-      renderHistoryFilter();
+      updateProjectCurrentDisplay();
+      await loadHistory();
+    } else {
+      renderFilmstrip();
     }
     const images = JSON.parse(g.image_paths_json || '[]');
     if (images.length) setFramesResult(images, false);
@@ -1016,9 +965,107 @@ async function restoreGeneration(id) {
   }
 }
 
+// ================= RECIPES =================
+let RECIPES = [];
+
+async function loadRecipes() {
+  RECIPES = await api('/api/recipes');
+  const sel = document.getElementById('recipeSelect');
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">— Seleccionar receta —</option>' +
+    RECIPES.map(r => `<option value="${r.name}">${r.name}</option>`).join('');
+  if (RECIPES.some(r => r.name === prev)) sel.value = prev;
+}
+
+function applyRecipe(r) {
+  document.getElementById('width').value = r.width;
+  document.getElementById('height').value = r.height;
+  customSizeActive = true;
+  document.getElementById('customSizeRow').classList.add('open');
+  applySize(r.width, r.height);
+  renderSizeGrid();
+  batchInput.value = r.batch_size;
+  renderFrames(clampBatch(r.batch_size));
+  document.getElementById('steps').value = r.steps;
+  document.getElementById('cfg').value = r.cfg;
+  document.getElementById('sampler').value = r.sampler;
+  document.getElementById('scheduler').value = r.scheduler;
+  document.getElementById('stepsMeta').textContent = r.steps;
+  document.getElementById('cfgMeta').textContent = r.cfg;
+  document.getElementById('samplerMeta').textContent = r.sampler;
+  if ([...document.getElementById('checkpoint').options].some(o => o.value === r.checkpoint)) {
+    document.getElementById('checkpoint').value = r.checkpoint;
+    updateCkptCurrentDisplay();
+  }
+  loraStack = JSON.parse(r.loras_json || '[]');
+  renderLoraStack();
+  loraStack.forEach(s => {
+    const lib = findLora(s.name);
+    if (lib && lib.triggers.length) addTriggerWordToPositive(lib.triggers[0], { silent: true });
+  });
+  showToast(`Receta "${r.name}" aplicada`);
+}
+
+document.getElementById('recipeSelect').addEventListener('change', (e) => {
+  const name = e.target.value;
+  if (!name) return;
+  const r = RECIPES.find(x => x.name === name);
+  if (r) applyRecipe(r);
+});
+
+document.getElementById('saveRecipeBtn').addEventListener('click', async () => {
+  const checkpoint = document.getElementById('checkpoint').value;
+  if (!checkpoint) {
+    showToast('No hay checkpoint seleccionado', true);
+    return;
+  }
+  const name = prompt('Nombre de la receta:');
+  if (!name || !name.trim()) return;
+  const payload = {
+    name: name.trim(),
+    checkpoint,
+    width: parseInt(document.getElementById('width').value, 10),
+    height: parseInt(document.getElementById('height').value, 10),
+    batch_size: clampBatch(batchInput.value),
+    steps: parseInt(document.getElementById('steps').value, 10),
+    cfg: parseFloat(document.getElementById('cfg').value),
+    sampler: document.getElementById('sampler').value,
+    scheduler: document.getElementById('scheduler').value,
+    loras: loraStack,
+  };
+  try {
+    await api('/api/recipes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    await loadRecipes();
+    document.getElementById('recipeSelect').value = payload.name;
+    showToast(`Receta "${payload.name}" guardada`);
+  } catch (e) {
+    showToast('No se pudo guardar la receta: ' + e.message, true);
+  }
+});
+
+document.getElementById('deleteRecipeBtn').addEventListener('click', async () => {
+  const sel = document.getElementById('recipeSelect');
+  const name = sel.value;
+  if (!name) {
+    showToast('Selecciona una receta para eliminar', true);
+    return;
+  }
+  if (!confirm(`¿Eliminar la receta "${name}"?`)) return;
+  try {
+    await api(`/api/recipes/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    await loadRecipes();
+    showToast('Receta eliminada');
+  } catch (e) {
+    showToast('No se pudo eliminar: ' + e.message, true);
+  }
+});
+
 // ================= FULL HISTORY BROWSER =================
 const HISTORY_PAGE_SIZE = 16;
-let historyModalScope = '(root)';
 let historyModalPage = 0;
 let historyModalRows = [];
 let modalHistoryImages = []; // flat {path, id, seed, project} for the modal's lightbox
@@ -1029,16 +1076,73 @@ let historyModalHasMore = false;
 function renderHistoryModalTree() {
   const el = document.getElementById('historyModalTree');
   el.innerHTML = `
-    ${PROJECTS.map(p => `<div class="tree-item${historyModalScope === p ? ' active' : ''}" data-project="${p}">${p === '(root)' ? '— root —' : p}</div>`).join('')}
+    ${PROJECTS.map(p => `<div class="tree-item${currentProject === p ? ' active' : ''}" data-project="${p}">${p === '(root)' ? '— root —' : p}</div>`).join('')}
   `;
   el.querySelectorAll('.tree-item').forEach(item => {
+    const project = item.dataset.project;
     item.addEventListener('click', () => {
-      historyModalScope = item.dataset.project;
+      currentProject = project;
+      updateProjectCurrentDisplay();
+      updateModalActiveProjectDisplay();
       renderHistoryModalTree();
       loadHistoryModalPage(true);
+      loadHistory();
     });
   });
 }
+
+function updateModalActiveProjectDisplay() {
+  document.getElementById('modalActiveProjectName').textContent =
+    currentProject === '(root)' ? '— root —' : currentProject;
+  document.getElementById('modalRenameProjectBtn').style.display =
+    currentProject === '(root)' ? 'none' : 'inline-block';
+}
+
+document.getElementById('modalRenameProjectBtn').addEventListener('click', () => renameProject(currentProject));
+
+async function renameProject(oldName) {
+  const newName = prompt('Nuevo nombre del proyecto:', oldName);
+  if (!newName || !newName.trim() || newName.trim() === oldName) return;
+  try {
+    const result = await api('/api/projects/rename', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ old_name: oldName, new_name: newName.trim() }),
+    });
+    if (currentProject === oldName) currentProject = result.name;
+    await loadProjects();
+    updateProjectCurrentDisplay();
+    updateModalActiveProjectDisplay();
+    renderHistoryModalTree();
+    loadHistoryModalPage(true);
+    loadHistory();
+    showToast(`Proyecto renombrado a "${result.name}"`);
+  } catch (e) {
+    showToast('No se pudo renombrar: ' + e.message, true);
+  }
+}
+
+document.getElementById('newProjectModalBtn').addEventListener('click', async () => {
+  const name = prompt('Nombre del nuevo proyecto:');
+  if (!name || !name.trim()) return;
+  try {
+    const created = await api('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name.trim() }),
+    });
+    currentProject = created.name;
+    await loadProjects();
+    updateProjectCurrentDisplay();
+    updateModalActiveProjectDisplay();
+    renderHistoryModalTree();
+    loadHistoryModalPage(true);
+    loadHistory();
+    showToast(`Proyecto "${created.name}" creado`);
+  } catch (e) {
+    showToast('No se pudo crear el proyecto: ' + e.message, true);
+  }
+});
 
 async function loadHistoryModalPage(reset, page) {
   const grid = document.getElementById('historyModalGrid');
@@ -1051,7 +1155,7 @@ async function loadHistoryModalPage(reset, page) {
   }
   let rows;
   try {
-    rows = await api(`/api/history?project=${encodeURIComponent(historyModalScope)}&limit=${HISTORY_PAGE_SIZE}&offset=${historyModalPage * HISTORY_PAGE_SIZE}`);
+    rows = await api(`/api/history?project=${encodeURIComponent(currentProject)}&limit=${HISTORY_PAGE_SIZE}&offset=${historyModalPage * HISTORY_PAGE_SIZE}`);
   } catch (e) {
     grid.innerHTML = `<div class="empty-note">no se pudo cargar el historial</div>`;
     return;
@@ -1118,7 +1222,7 @@ function renderHistoryModalGrid() {
     }
     item.querySelector('.delete-btn').addEventListener('click', (e) => {
       e.stopPropagation();
-      deleteSingleGeneration(h.id, () => loadHistoryModalPage(true));
+      deleteSingleGeneration(h.id, () => { loadHistoryModalPage(true); loadHistory(); });
     });
     grid.appendChild(item);
   });
@@ -1170,21 +1274,22 @@ document.getElementById('historyBulkDelete').addEventListener('click', async () 
     showToast(`${res.deleted} generación(es) eliminadas`);
     setHistorySelectMode(false);
     loadHistoryModalPage(true);
+    loadHistory();
   } catch (e) {
     showToast('No se pudo eliminar: ' + e.message, true);
   }
 });
 
-function openHistoryModal() {
+function openProjectModal() {
   document.getElementById('historyModalBackdrop').classList.add('open');
   setHistorySelectMode(false);
+  updateModalActiveProjectDisplay();
   renderHistoryModalTree();
   loadHistoryModalPage(true);
 }
 function closeHistoryModal() {
   document.getElementById('historyModalBackdrop').classList.remove('open');
 }
-document.getElementById('openHistoryModal').addEventListener('click', openHistoryModal);
 document.getElementById('historyPagerPrev').addEventListener('click', () => {
   if (historyModalPage > 0) loadHistoryModalPage(false, historyModalPage - 1);
 });
@@ -1239,7 +1344,6 @@ function renderLightbox() {
   const m = lightboxMetaList && lightboxMetaList[lightboxIndex];
   if (m) {
     metaText += ` · seed ${String(m.seed).slice(0, 8)}`;
-    if (historyScope === 'all') metaText += ` · ${m.project}`;
     restoreBtn.style.display = 'inline-flex';
   } else {
     restoreBtn.style.display = 'none';
@@ -1301,6 +1405,7 @@ async function pollStatus(generationId) {
       document.getElementById('generateBtn').disabled = false;
       const images = JSON.parse(g.image_paths_json || '[]');
       setFramesResult(images, false);
+      currentGenId = generationId;
       loadHistory();
     } else if (g.status === 'error') {
       clearInterval(polling);
@@ -1399,12 +1504,12 @@ document.getElementById('generateBtn').addEventListener('click', async () => {
 
     await loadLoras();
     await loadCkptGallery();
+    await loadRecipes();
 
     document.getElementById('stepsMeta').textContent = document.getElementById('steps').value;
     document.getElementById('cfgMeta').textContent = document.getElementById('cfg').value;
     document.getElementById('samplerMeta').textContent = document.getElementById('sampler').value;
 
-    renderHistoryFilter();
     loadHistory();
   } catch (e) {
     showToast('No se pudo inicializar: ' + e.message + ' — ¿ComfyUI está corriendo en 8188?', true);

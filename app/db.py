@@ -39,6 +39,20 @@ CREATE TABLE IF NOT EXISTS settings (
 CREATE TABLE IF NOT EXISTS lora_favorites (
     name TEXT PRIMARY KEY
 );
+
+CREATE TABLE IF NOT EXISTS recipes (
+    name TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL,
+    checkpoint TEXT,
+    width INTEGER,
+    height INTEGER,
+    batch_size INTEGER,
+    steps INTEGER,
+    cfg REAL,
+    sampler TEXT,
+    scheduler TEXT,
+    loras_json TEXT
+);
 """
 
 # Workflow feature-toggle defaults, matching what's already baked into
@@ -198,6 +212,17 @@ def create_project(name: str):
         )
 
 
+def rename_project(old: str, new: str):
+    with get_conn() as conn:
+        conn.execute("UPDATE projects SET name = ? WHERE name = ?", (new, old))
+        conn.execute(
+            "UPDATE generations SET project = ?, "
+            "image_paths_json = REPLACE(image_paths_json, ?, ?) "
+            "WHERE project = ?",
+            (new, f'"{old}/', f'"{new}/', old),
+        )
+
+
 def get_settings() -> dict:
     with get_conn() as conn:
         rows = conn.execute("SELECT key, value FROM settings").fetchall()
@@ -229,3 +254,29 @@ def set_lora_favorite(name: str, favorite: bool):
             conn.execute("INSERT OR IGNORE INTO lora_favorites (name) VALUES (?)", (name,))
         else:
             conn.execute("DELETE FROM lora_favorites WHERE name = ?", (name,))
+
+
+def list_recipes() -> list[dict]:
+    with get_conn() as conn:
+        rows = conn.execute("SELECT * FROM recipes ORDER BY name COLLATE NOCASE").fetchall()
+        return [dict(r) for r in rows]
+
+
+def save_recipe(recipe: dict):
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO recipes (name, created_at, checkpoint, width, height, batch_size, "
+            "steps, cfg, sampler, scheduler, loras_json) "
+            "VALUES (:name, datetime('now'), :checkpoint, :width, :height, :batch_size, "
+            ":steps, :cfg, :sampler, :scheduler, :loras_json) "
+            "ON CONFLICT(name) DO UPDATE SET "
+            "checkpoint=excluded.checkpoint, width=excluded.width, height=excluded.height, "
+            "batch_size=excluded.batch_size, steps=excluded.steps, cfg=excluded.cfg, "
+            "sampler=excluded.sampler, scheduler=excluded.scheduler, loras_json=excluded.loras_json",
+            recipe,
+        )
+
+
+def delete_recipe(name: str):
+    with get_conn() as conn:
+        conn.execute("DELETE FROM recipes WHERE name = ?", (name,))

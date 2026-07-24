@@ -14,6 +14,8 @@ from .schemas import (
     GenerateRequest,
     LoraFavoriteRequest,
     NewProjectRequest,
+    RenameProjectRequest,
+    SaveRecipeRequest,
 )
 
 app = FastAPI(title="ABK Studio")
@@ -179,6 +181,31 @@ async def api_ollama_models():
         raise HTTPException(502, f"Ollama unreachable: {exc}")
 
 
+# ---------- recipes ----------
+
+@app.get("/api/recipes")
+def api_list_recipes():
+    return db.list_recipes()
+
+
+@app.post("/api/recipes")
+def api_save_recipe(req: SaveRecipeRequest):
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(400, "Nombre de receta vacío")
+    recipe = req.model_dump()
+    recipe["name"] = name
+    recipe["loras_json"] = json.dumps(recipe.pop("loras"))
+    db.save_recipe(recipe)
+    return {"saved": name}
+
+
+@app.delete("/api/recipes/{name}")
+def api_delete_recipe(name: str):
+    db.delete_recipe(name)
+    return {"deleted": name}
+
+
 # ---------- projects ----------
 
 @app.get("/api/projects")
@@ -193,6 +220,30 @@ def api_create_project(req: NewProjectRequest):
         raise HTTPException(400, "Nombre de proyecto vacío")
     db.create_project(name)
     return {"name": name}
+
+
+@app.post("/api/projects/rename")
+def api_rename_project(req: RenameProjectRequest):
+    if req.old_name == "(root)":
+        raise HTTPException(400, "No se puede renombrar el proyecto root")
+    new_name = req.new_name.strip().lower().replace(" ", "-")
+    if not new_name:
+        raise HTTPException(400, "Nombre de proyecto vacío")
+    projects = db.list_projects()
+    if req.old_name not in projects:
+        raise HTTPException(404, "Proyecto no encontrado")
+    if new_name != req.old_name and new_name in projects:
+        raise HTTPException(400, f"Ya existe un proyecto llamado '{new_name}'")
+
+    old_dir = config.COMFY_OUTPUT_DIR / req.old_name
+    new_dir = config.COMFY_OUTPUT_DIR / new_name
+    if new_name != req.old_name and old_dir.is_dir():
+        if new_dir.exists():
+            raise HTTPException(400, f"Ya existe una carpeta '{new_name}' en disco")
+        old_dir.rename(new_dir)
+
+    db.rename_project(req.old_name, new_name)
+    return {"name": new_name}
 
 
 # ---------- settings ----------

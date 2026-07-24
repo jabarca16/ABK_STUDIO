@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ABK Studio</title>
-<link rel="stylesheet" href="/static/css/style.css?v=22">
+<link rel="stylesheet" href="/static/css/style.css?v=23">
 </head>
 <body>
 
@@ -18,16 +18,10 @@
   </div>
   <div class="workflow-chip">workflow &nbsp;<b>Standard_V37</b></div>
 
-  <div class="project-select" id="projectSelectWrap">
+  <button class="project-select" id="openProjectModal" title="Explorador de proyectos">
     <span class="tag">Project</span>
-    <select id="projectSelect"></select>
-    <button class="project-new-btn" id="newProjectBtn" title="New project">+</button>
-  </div>
-  <div class="project-new-row" id="projectNewRow">
-    <input type="text" id="newProjectInput" placeholder="project name…" maxlength="40">
-    <button id="confirmNewProject" title="Create">✓</button>
-    <button class="cancel" id="cancelNewProject" title="Cancel">×</button>
-  </div>
+    <span class="project-current" id="projectCurrentName">(root)</span>
+  </button>
 
   <div class="theme-menu-wrap" id="themeMenuWrap">
     <button class="theme-toggle" id="themeToggle" title="Theme">◐</button>
@@ -95,12 +89,28 @@
       <span>seed <b id="seedMeta">-1</b></span>
       <span>saves to <b id="pathMeta">output/</b></span>
     </div>
+
+    <div class="filmstrip" id="filmstrip">
+      <button class="filmstrip-nav prev" id="filmstripPrev" title="Anterior">‹</button>
+      <div class="filmstrip-track" id="filmstripTrack"></div>
+      <button class="filmstrip-nav next" id="filmstripNext" title="Siguiente">›</button>
+    </div>
   </div>
 
   <!-- RIGHT: params + history -->
   <div class="pane">
     <div class="pane-head"><h2>Parameters</h2></div>
     <div class="pane-body" style="gap:16px;">
+
+      <div>
+        <label class="field-label">Recipe
+          <button class="sync-btn" id="saveRecipeBtn" title="Guardar configuración actual como receta">💾</button>
+          <button class="sync-btn" id="deleteRecipeBtn" title="Eliminar receta seleccionada">🗑</button>
+        </label>
+        <select id="recipeSelect">
+          <option value="">— Seleccionar receta —</option>
+        </select>
+      </div>
 
       <div>
         <label class="field-label">Checkpoint <button class="sync-btn" id="syncCheckpoints" title="Sincronizar lista desde ComfyUI">⟳</button></label>
@@ -166,10 +176,6 @@
 
     </div>
 
-    <div class="pane-head" style="margin-top:6px;"><h2>History</h2><button class="sync-btn" id="syncHistoryBtn" title="Sincronizar con archivos en disco">⟳</button></div>
-    <div class="history-filter" id="historyFilter"></div>
-    <div class="history-grid" id="historyGrid"></div>
-    <button class="history-viewall-btn" id="openHistoryModal">Ver historial completo →</button>
   </div>
 
 </div>
@@ -208,7 +214,13 @@
 <div class="modal-backdrop" id="historyModalBackdrop">
   <div class="modal">
     <div class="modal-head">
-      <h3>Historial completo</h3>
+      <h3>Explorador de proyectos</h3>
+      <span class="modal-active-project">
+        <span id="modalActiveProjectName">(root)</span>
+        <button class="tree-rename-btn" id="modalRenameProjectBtn" title="Renombrar proyecto">✎</button>
+      </span>
+      <button class="select-toggle-btn" id="newProjectModalBtn" title="Nuevo proyecto">+ proyecto</button>
+      <button class="sync-btn" id="syncHistoryBtn" title="Sincronizar con archivos en disco">⟳</button>
       <button class="select-toggle-btn" id="historySelectToggle" title="Seleccionar varias">☑ seleccionar</button>
       <button class="modal-close" id="closeHistoryModal">×</button>
     </div>

@@ -26,6 +26,11 @@ class NewProjectRequest(BaseModel):
     name: str
 
 
+class RenameProjectRequest(BaseModel):
+    old_name: str
+    new_name: str
+
+
 class DeleteHistoryRequest(BaseModel):
     ids: list[str]
 
@@ -37,3 +42,16 @@ class EnhancePromptRequest(BaseModel):
 class LoraFavoriteRequest(BaseModel):
     name: str
     favorite: bool
+
+
+class SaveRecipeRequest(BaseModel):
+    name: str
+    checkpoint: str
+    width: int
+    height: int
+    batch_size: int
+    steps: int
+    cfg: float
+    sampler: str
+    scheduler: str
+    loras: list[LoraSelection] = Field(default_factory=list)
