@@ -29,6 +29,20 @@ document.addEventListener('click', (e) => {
   if (!themeMenuWrap.contains(e.target)) themeMenu.classList.remove('open');
 });
 
+// ---- collapsible panels ----
+const mainLayout = document.getElementById('mainLayout');
+document.getElementById('leftHandle').addEventListener('click', () => {
+  mainLayout.classList.toggle('left-collapsed');
+  document.getElementById('leftPane').classList.toggle('collapsed');
+});
+document.getElementById('rightHandle').addEventListener('click', () => {
+  mainLayout.classList.toggle('right-collapsed');
+  document.getElementById('rightPane').classList.toggle('collapsed');
+});
+document.getElementById('filmstripHandle').addEventListener('click', () => {
+  document.getElementById('filmstrip').classList.toggle('collapsed');
+});
+
 // ---- toast ----
 function showToast(msg, isError = false) {
   const t = document.getElementById('toast');
@@ -905,6 +919,43 @@ document.getElementById('filmstripNext').addEventListener('click', () => {
   const nextIdx = idx === -1 ? 0 : Math.min(idx + 1, filmstripRows.length - 1);
   restoreGeneration(filmstripRows[nextIdx].id);
 });
+
+// Click-and-drag horizontal panning (lets us hide the scrollbar entirely).
+(function setupFilmstripDrag() {
+  const track = document.getElementById('filmstripTrack');
+  let dragging = false;
+  let dragged = false;
+  let startX = 0;
+  let startScroll = 0;
+
+  track.addEventListener('mousedown', (e) => {
+    dragging = true;
+    dragged = false;
+    startX = e.pageX;
+    startScroll = track.scrollLeft;
+    track.classList.add('dragging');
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const dx = e.pageX - startX;
+    if (Math.abs(dx) > 4) dragged = true;
+    track.scrollLeft = startScroll - dx;
+  });
+  window.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    track.classList.remove('dragging');
+  });
+  // Capture phase: swallow the click that follows a drag before it reaches
+  // an item's own click listener (which would restore that generation).
+  track.addEventListener('click', (e) => {
+    if (dragged) {
+      e.stopPropagation();
+      e.preventDefault();
+      dragged = false;
+    }
+  }, true);
+})();
 
 async function deleteSingleGeneration(id, onDeleted) {
   if (!confirm('¿Eliminar esta generación? Se borra también la imagen del disco. Esta acción no se puede deshacer.')) return;
