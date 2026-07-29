@@ -902,6 +902,9 @@ details.advanced .adv-body{ padding-top:14px; display:flex; flex-direction:colum
 
 @media (max-width: 980px){
   .layout{ grid-template-columns:1fr; }
+  #leftPane, #leftHandle, .pane.stage, #rightHandle, #rightPane{ grid-column:1; }
+  #leftHandle, #rightHandle{ display:none; }
+  .pane.collapsed{ display:block; }
 }
 
 @media (max-width: 640px){

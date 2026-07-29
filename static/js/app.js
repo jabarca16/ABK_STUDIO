@@ -1478,7 +1478,7 @@ async function pollStatus(generationId) {
   }
 }
 
-document.getElementById('generateBtn').addEventListener('click', async () => {
+async function startGeneration() {
   const checkpoint = document.getElementById('checkpoint').value;
   if (!checkpoint) {
     showToast('No hay checkpoint seleccionado', true);
@@ -1540,6 +1540,17 @@ document.getElementById('generateBtn').addEventListener('click', async () => {
     setFramesResult([], true);
     showToast('No se pudo lanzar la generación: ' + e.message, true);
   }
+}
+
+document.getElementById('generateBtn').addEventListener('click', startGeneration);
+
+[document.getElementById('positive'), document.getElementById('negative')].forEach(el => {
+  el.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.shiftKey) {
+      e.preventDefault();
+      if (!document.getElementById('generateBtn').disabled) startGeneration();
+    }
+  });
 });
 
 // ================= INIT =================
