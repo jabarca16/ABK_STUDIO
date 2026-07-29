@@ -11,6 +11,7 @@ COMFY_OUTPUT_DIR = COMFY_ROOT / "output"
 
 WORKFLOW_DIR = PROJECT_ROOT / "Workflow"
 DEFAULT_WORKFLOW = WORKFLOW_DIR / "Standard_V37.api.json"
+UI_WORKFLOW = WORKFLOW_DIR / "Standard_V37.json"
 
 DB_PATH = PROJECT_ROOT / "data" / "abkstudio.sqlite3"
 

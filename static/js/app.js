@@ -515,6 +515,16 @@ document.getElementById('loraSearch').addEventListener('input', e => renderLoraG
 // ---- settings modal (general + workflow tabs) ----
 let DETECTOR_MODELS = null;
 let OLLAMA_MODELS = null;
+let VAE_MODELS = null;
+
+function fillModelSelect(select, options, current) {
+  select.innerHTML = options.map(m =>
+    `<option value="${m}" ${m === current ? 'selected' : ''}>${m}</option>`
+  ).join('');
+  if (current && !options.includes(current)) {
+    select.insertAdjacentHTML('afterbegin', `<option value="${current}" selected>${current} (no instalado)</option>`);
+  }
+}
 
 document.querySelectorAll('.settings-tab').forEach(tab => {
   tab.addEventListener('click', () => {
@@ -529,29 +539,18 @@ document.getElementById('openSettingsModal').addEventListener('click', async () 
   document.getElementById('settingsModalBackdrop').classList.add('open');
   try {
     if (!DETECTOR_MODELS) DETECTOR_MODELS = await api('/api/library/detector-models');
+    if (!VAE_MODELS) VAE_MODELS = await api('/api/library/vaes');
     const settings = await api('/api/settings');
     document.querySelectorAll('#settingsList input[data-toggle]').forEach(input => {
       input.checked = !!settings[input.dataset.toggle];
     });
-    document.querySelectorAll('[data-panel="workflow"] select[data-model]').forEach(select => {
-      const current = settings[select.dataset.model];
-      select.innerHTML = DETECTOR_MODELS.map(m =>
-        `<option value="${m}" ${m === current ? 'selected' : ''}>${m}</option>`
-      ).join('');
-      if (current && !DETECTOR_MODELS.includes(current)) {
-        select.insertAdjacentHTML('afterbegin', `<option value="${current}" selected>${current} (no instalado)</option>`);
-      }
+    const sources = { detectors: DETECTOR_MODELS, vaes: VAE_MODELS };
+    document.querySelectorAll('[data-panel="workflow"] select[data-source]').forEach(select => {
+      fillModelSelect(select, sources[select.dataset.source] || [], settings[select.dataset.model]);
     });
     try {
       if (!OLLAMA_MODELS) OLLAMA_MODELS = await api('/api/library/ollama-models');
-      const select = document.getElementById('ollamaModelSelect');
-      const current = settings.ollama_model;
-      select.innerHTML = OLLAMA_MODELS.map(m =>
-        `<option value="${m}" ${m === current ? 'selected' : ''}>${m}</option>`
-      ).join('');
-      if (current && !OLLAMA_MODELS.includes(current)) {
-        select.insertAdjacentHTML('afterbegin', `<option value="${current}" selected>${current} (no instalado)</option>`);
-      }
+      fillModelSelect(document.getElementById('ollamaModelSelect'), OLLAMA_MODELS, settings.ollama_model);
     } catch (e) {
       showToast('No se pudo conectar con Ollama: ' + e.message, true);
     }

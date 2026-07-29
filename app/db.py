@@ -79,9 +79,12 @@ FEATURE_TOGGLE_DEFAULTS = {
 }
 
 # Detector model_name per ADetailer group — installed .pt files vary per
-# machine, so these are exposed as dropdowns instead of hardcoded.
+# machine, so these are exposed as dropdowns instead of hardcoded. Same reason
+# for the standalone VAE: the template's sdxl_vae.safetensors isn't installed
+# everywhere, and a missing one makes ComfyUI reject the whole prompt.
 GENERAL_SETTINGS_DEFAULTS = {
     "ollama_model": config.OLLAMA_MODEL,
+    "seperate_vae_model": workflow_builder.DEFAULT_SEPARATE_VAE,
 }
 
 ALL_SETTINGS_DEFAULTS = {

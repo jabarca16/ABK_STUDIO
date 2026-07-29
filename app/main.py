@@ -87,6 +87,11 @@ async def on_startup():
     global _ui_workflow_cache
     db.init_db()
     _ui_workflow_cache = workflow_builder.load_ui_template()
+    # The node map in workflow_builder was transcribed from the editor export by
+    # hand; if someone re-exports the workflow with different ids, say so loudly
+    # instead of quietly generating wrong images.
+    for problem in workflow_builder.validate_template():
+        print(f"[ABK] AVISO workflow: {problem}")
     asyncio.create_task(_reconcile_pending_loop())
 
 
@@ -169,6 +174,15 @@ async def api_detector_models():
     try:
         info = await comfy_client.get_object_info("UltralyticsDetectorProvider")
         return info["UltralyticsDetectorProvider"]["input"]["required"]["model_name"][0]
+    except Exception as exc:
+        raise HTTPException(502, f"No se pudo consultar ComfyUI: {exc}")
+
+
+@app.get("/api/library/vaes")
+async def api_vaes():
+    try:
+        info = await comfy_client.get_object_info("VAELoader")
+        return info["VAELoader"]["input"]["required"]["vae_name"][0]
     except Exception as exc:
         raise HTTPException(502, f"No se pudo consultar ComfyUI: {exc}")
 
@@ -282,10 +296,13 @@ async def api_generate(req: GenerateRequest):
     params = req.model_dump()
     params["loras"] = [l for l in params["loras"]]
     graph, resolved_seed = workflow_builder.build_prompt_graph(params, db.get_settings())
+    # Image Saver embeds this as the PNG's `workflow`, so it has to describe
+    # this run — the raw template would reopen with the author's own settings.
+    ui_workflow = workflow_builder.build_ui_workflow(_ui_workflow_cache, params, resolved_seed)
 
     client_id = str(uuid.uuid4())
     try:
-        result = await comfy_client.queue_prompt(graph, client_id, _ui_workflow_cache)
+        result = await comfy_client.queue_prompt(graph, client_id, ui_workflow)
     except Exception as exc:
         raise HTTPException(502, f"ComfyUI rechazó el job: {exc}")
 
