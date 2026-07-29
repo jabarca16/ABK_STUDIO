@@ -16,6 +16,18 @@ async def queue_prompt(graph: dict, client_id: str, ui_workflow: dict | None = N
         return resp.json()
 
 
+async def cancel_prompt(prompt_id: str) -> bool:
+    """Interrupts prompt_id if it's running, or dequeues it if it's still
+    pending — same endpoint handles both, atomically, so there's no separate
+    "is it running yet" check to race against. Returns whether a cancel was
+    actually dispatched; False just means ComfyUI already considers it done
+    (finished or unknown id) and there's nothing left to stop."""
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(f"{config.COMFY_BASE_URL}/api/jobs/{prompt_id}/cancel")
+        resp.raise_for_status()
+        return bool(resp.json().get("cancelled"))
+
+
 async def get_history(prompt_id: str) -> dict:
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.get(f"{config.COMFY_BASE_URL}/history/{prompt_id}")

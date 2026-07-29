@@ -395,6 +395,7 @@ details.advanced .adv-body{ padding-top:14px; display:flex; flex-direction:colum
 .generate-btn:active{ transform:translateY(0); }
 .generate-btn:disabled{ opacity:0.55; cursor:not-allowed; transform:none; }
 .generate-btn .bolt{ font-size:15px; }
+.generate-btn.cancel-mode{ background:var(--danger); color:#fff; box-shadow:0 6px 18px color-mix(in srgb, var(--danger) 45%, transparent); }
 .queue-info{ font-family:var(--font-mono); font-size:11.5px; color:var(--text-faint); }
 .stage-toolbar .spacer{ flex:1; }
 .batch-count{ display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-dim); }

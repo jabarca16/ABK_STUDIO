@@ -339,13 +339,43 @@ async def api_generate(req: GenerateRequest):
     return {"generation_id": gen_id, "prompt_id": prompt_id, "seed": resolved_seed}
 
 
+@app.post("/api/generate/{generation_id}/cancel")
+async def api_cancel_generation(generation_id: str):
+    gen = db.get_generation(generation_id)
+    if not gen:
+        raise HTTPException(404, "Generación no encontrada")
+    if gen["status"] not in ("queued", "running"):
+        return gen  # already terminal — cancelling is a no-op, not an error
+
+    try:
+        await comfy_client.cancel_prompt(gen["prompt_id"])
+    except Exception as exc:
+        raise HTTPException(502, f"No se pudo cancelar en ComfyUI: {exc}")
+
+    # The cancel call can race a job that finishes in the same instant — check
+    # ComfyUI's own record before declaring it cancelled, so a completed batch
+    # doesn't get its images thrown away under a "cancelled" label.
+    try:
+        history = await comfy_client.get_history(gen["prompt_id"])
+        entry = history.get(gen["prompt_id"])
+    except Exception:
+        entry = None
+
+    if entry and entry.get("status", {}).get("completed"):
+        return _apply_history_entry(generation_id, entry)
+
+    db.update_generation_status(generation_id, "cancelled")
+    _stop_tracking(generation_id)
+    return db.get_generation(generation_id)
+
+
 @app.get("/api/status/{generation_id}")
 async def api_status(generation_id: str):
     gen = db.get_generation(generation_id)
     if not gen:
         raise HTTPException(404, "Generación no encontrada")
 
-    if gen["status"] in ("done", "error"):
+    if gen["status"] in ("done", "error", "cancelled"):
         _stop_tracking(generation_id)
         gen["last_log"] = ""
         return gen

@@ -1353,6 +1353,18 @@ document.getElementById('historyModalBackdrop').addEventListener('click', (e) =>
 
 // ================= GENERATE =================
 let polling = null;
+let activeGenId = null;
+
+function setGenerateButtonMode(mode) {
+  // mode: 'generate' | 'cancel' | 'busy' (mid-request, no valid action yet)
+  const btn = document.getElementById('generateBtn');
+  btn.classList.toggle('cancel-mode', mode === 'cancel');
+  btn.disabled = mode === 'busy';
+  btn.dataset.mode = mode;
+  btn.innerHTML = mode === 'cancel'
+    ? '<span class="bolt">■</span> Cancelar'
+    : '<span class="bolt">▶</span> Generate';
+}
 
 let canvasImages = [];
 function setFramesResult(images, isError) {
@@ -1442,30 +1454,40 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowRight') document.getElementById('lightboxNext').click();
 });
 
+function stopPolling() {
+  if (polling) clearInterval(polling);
+  polling = null;
+  activeGenId = null;
+  setGenerateButtonMode('generate');
+}
+
 async function pollStatus(generationId) {
   try {
     const g = await api(`/api/status/${generationId}`);
     if (g.status === 'done') {
-      clearInterval(polling);
-      polling = null;
+      stopPolling();
       document.getElementById('batchProgress').classList.remove('active');
       document.getElementById('progressFill').classList.remove('indeterminate');
       document.getElementById('queueInfo').textContent = 'queue — idle';
       document.getElementById('logPeek').textContent = '';
-      document.getElementById('generateBtn').disabled = false;
       const images = JSON.parse(g.image_paths_json || '[]');
       setFramesResult(images, false);
       currentGenId = generationId;
       loadHistory();
     } else if (g.status === 'error') {
-      clearInterval(polling);
-      polling = null;
+      stopPolling();
       document.getElementById('batchProgress').classList.remove('active');
-      document.getElementById('generateBtn').disabled = false;
       document.getElementById('queueInfo').textContent = 'queue — error';
       document.getElementById('logPeek').textContent = '';
       setFramesResult([], true);
       showToast('La generación falló en ComfyUI', true);
+      loadHistory();
+    } else if (g.status === 'cancelled') {
+      stopPolling();
+      document.getElementById('batchProgress').classList.remove('active');
+      document.getElementById('queueInfo').textContent = 'queue — cancelado';
+      document.getElementById('logPeek').textContent = '';
+      setFramesResult([], false);
       loadHistory();
     } else {
       document.getElementById('progressLabel').textContent =
@@ -1474,6 +1496,21 @@ async function pollStatus(generationId) {
     }
   } catch (e) {
     // transient network hiccup while polling — keep trying silently
+  }
+}
+
+async function cancelGeneration() {
+  if (!activeGenId) return;
+  const genId = activeGenId;
+  setGenerateButtonMode('busy');
+  try {
+    await api(`/api/generate/${genId}/cancel`, { method: 'POST' });
+    // Don't assume the cancel landed before the job finished — let the next
+    // poll tick read ComfyUI's real outcome instead of guessing here.
+    if (activeGenId === genId) await pollStatus(genId);
+  } catch (e) {
+    showToast('No se pudo cancelar: ' + e.message, true);
+    if (activeGenId === genId) setGenerateButtonMode('cancel');
   }
 }
 
@@ -1510,8 +1547,7 @@ async function startGeneration() {
     checkpoint,
   };
 
-  const btn = document.getElementById('generateBtn');
-  btn.disabled = true;
+  setGenerateButtonMode('busy');
   renderFrames(payload.batch_size);
   document.querySelectorAll('.frame').forEach(f => f.classList.add('generating'));
   document.getElementById('batchProgress').classList.add('active');
@@ -1530,30 +1566,39 @@ async function startGeneration() {
     if (!seedLocked) {
       document.getElementById('seed').value = -1;
     }
+    activeGenId = res.generation_id;
+    setGenerateButtonMode('cancel');
     if (polling) clearInterval(polling);
     polling = setInterval(() => pollStatus(res.generation_id), 1200);
     pollStatus(res.generation_id);
   } catch (e) {
-    btn.disabled = false;
+    setGenerateButtonMode('generate');
     document.getElementById('batchProgress').classList.remove('active');
     setFramesResult([], true);
     showToast('No se pudo lanzar la generación: ' + e.message, true);
   }
 }
 
-document.getElementById('generateBtn').addEventListener('click', startGeneration);
+document.getElementById('generateBtn').addEventListener('click', () => {
+  const mode = document.getElementById('generateBtn').dataset.mode;
+  if (mode === 'cancel') cancelGeneration();
+  else if (mode !== 'busy') startGeneration();
+});
 
 [document.getElementById('positive'), document.getElementById('negative')].forEach(el => {
   el.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && e.shiftKey) {
       e.preventDefault();
-      if (!document.getElementById('generateBtn').disabled) startGeneration();
+      if (document.getElementById('generateBtn').dataset.mode !== 'busy') {
+        document.getElementById('generateBtn').click();
+      }
     }
   });
 });
 
 // ================= INIT =================
 (async function init() {
+  setGenerateButtonMode('generate');
   try {
     const [checkpoints] = await Promise.all([
       loadCheckpoints(false),
