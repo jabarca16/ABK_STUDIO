@@ -37,6 +37,7 @@ class DeleteHistoryRequest(BaseModel):
 
 class EnhancePromptRequest(BaseModel):
     prompt: str
+    base_model: str = ""
 
 
 class LoraFavoriteRequest(BaseModel):

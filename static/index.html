@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ABK Studio</title>
-<link rel="stylesheet" href="/static/css/style.css?v=27">
+<link rel="stylesheet" href="/static/css/style.css?v=29">
 </head>
 <body>
 
@@ -95,6 +95,7 @@
     <div class="filmstrip-handle" id="filmstripHandle" title="Colapsar/expandir filmstrip"><span class="handle-grip">☰</span></div>
 
     <div class="filmstrip" id="filmstrip">
+      <button class="filmstrip-nav compare-mode-btn" id="compareModeBtn" title="Comparar imágenes (elige 2)">⧉</button>
       <button class="filmstrip-nav prev" id="filmstripPrev" title="Anterior">‹</button>
       <div class="filmstrip-track" id="filmstripTrack"></div>
       <button class="filmstrip-nav next" id="filmstripNext" title="Siguiente">›</button>
@@ -216,6 +217,21 @@
   </div>
 </div>
 
+<!-- Compare modal (side by side, max 2) -->
+<div class="modal-backdrop lightbox-backdrop" id="compareModalBackdrop">
+  <div class="compare-modal">
+    <button class="modal-close" id="closeCompareModal">×</button>
+    <div class="compare-pane">
+      <img id="compareImgA" src="" alt="">
+      <div class="compare-meta" id="compareMetaA"></div>
+    </div>
+    <div class="compare-pane">
+      <img id="compareImgB" src="" alt="">
+      <div class="compare-meta" id="compareMetaB"></div>
+    </div>
+  </div>
+</div>
+
 <!-- Full history browser modal -->
 <div class="modal-backdrop" id="historyModalBackdrop">
   <div class="modal">
@@ -322,6 +338,6 @@
   </div>
 </div>
 
-<script src="/static/js/app.js?v=26"></script>
+<script src="/static/js/app.js?v=28"></script>
 </body>
 </html>

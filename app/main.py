@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import comfy_client, config, db, library, ollama_client, workflow_builder
+from . import comfy_client, comfy_process, config, db, library, ollama_client, workflow_builder
 from .schemas import (
     DeleteHistoryRequest,
     EnhancePromptRequest,
@@ -116,6 +116,27 @@ async def api_health():
         return {"status": "down"}
     busy = bool(queue.get("queue_running")) or bool(queue.get("queue_pending"))
     return {"status": "working" if busy else "up"}
+
+
+@app.get("/api/comfy/status")
+async def api_comfy_status():
+    return {"process_running": comfy_process.is_running()}
+
+
+@app.post("/api/comfy/start")
+async def api_comfy_start():
+    started = comfy_process.start()
+    if not started:
+        raise HTTPException(400, "ComfyUI ya está corriendo")
+    return {"started": True}
+
+
+@app.post("/api/comfy/stop")
+async def api_comfy_stop():
+    stopped = comfy_process.stop()
+    if not stopped:
+        raise HTTPException(400, "ComfyUI no está corriendo")
+    return {"stopped": True}
 
 
 # ---------- library ----------
@@ -283,7 +304,7 @@ async def api_enhance_prompt(req: EnhancePromptRequest):
         raise HTTPException(400, "Prompt is empty")
     try:
         model = db.get_settings().get("ollama_model")
-        enhanced = await ollama_client.enhance_prompt(req.prompt, model)
+        enhanced = await ollama_client.enhance_prompt(req.prompt, model, req.base_model)
     except httpx.HTTPError as e:
         raise HTTPException(502, f"Ollama unreachable: {e}")
     return {"prompt": enhanced}

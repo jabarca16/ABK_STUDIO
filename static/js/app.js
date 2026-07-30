@@ -64,6 +64,9 @@ async function api(path, opts) {
 }
 
 // ================= SERVER STATUS =================
+let comfyProcessRunning = false;
+let comfyToggleBusy = false;
+
 async function pollHealth() {
   const tag = document.getElementById('serverStatus');
   try {
@@ -74,9 +77,40 @@ async function pollHealth() {
     tag.dataset.state = 'down';
     tag.querySelector('.status-label').textContent = 'down';
   }
+  try {
+    const st = await api('/api/comfy/status');
+    comfyProcessRunning = st.process_running;
+  } catch (e) {
+    comfyProcessRunning = false;
+  }
+  if (!comfyProcessRunning) {
+    tag.dataset.state = 'down';
+    tag.querySelector('.status-label').textContent = 'detenido';
+  }
+  tag.title = comfyToggleBusy ? '' : (comfyProcessRunning ? 'Click para detener ComfyUI' : 'Click para iniciar ComfyUI');
 }
 pollHealth();
 setInterval(pollHealth, 4000);
+
+document.getElementById('serverStatus').addEventListener('click', async () => {
+  if (comfyToggleBusy) return;
+  comfyToggleBusy = true;
+  try {
+    if (comfyProcessRunning) {
+      if (!confirm('¿Detener ComfyUI? Se cancelará cualquier generación en curso.')) return;
+      await api('/api/comfy/stop', { method: 'POST' });
+      showToast('Deteniendo ComfyUI...');
+    } else {
+      await api('/api/comfy/start', { method: 'POST' });
+      showToast('Iniciando ComfyUI (puede tardar unos segundos)...');
+    }
+  } catch (err) {
+    showToast('Error: ' + err.message, true);
+  } finally {
+    comfyToggleBusy = false;
+    pollHealth();
+  }
+});
 
 // ================= SIZE PRESETS =================
 const SIZE_TIERS = {
@@ -827,10 +861,11 @@ document.getElementById('enhancePromptBtn').addEventListener('click', async (e) 
   }
   btn.classList.add('spinning');
   try {
+    const ckpt = findCkpt(document.getElementById('checkpoint').value);
     const res = await api('/api/enhance-prompt', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: current }),
+      body: JSON.stringify({ prompt: current, base_model: (ckpt && ckpt.base_model) || '' }),
     });
     field.value = res.prompt;
     showToast('Prompt mejorado con IA');
@@ -844,6 +879,8 @@ document.getElementById('enhancePromptBtn').addEventListener('click', async (e) 
 // ================= HISTORY / FILMSTRIP =================
 let currentGenId = null;
 let filmstripRows = [];
+let compareMode = false;
+let compareSelection = [];
 
 document.getElementById('syncHistoryBtn').addEventListener('click', async (e) => {
   const btn = e.currentTarget;
@@ -886,18 +923,29 @@ function renderFilmstrip() {
     return;
   }
   track.innerHTML = '';
+  track.classList.toggle('compare-mode', compareMode);
   filmstripRows.forEach((h) => {
     const images = JSON.parse(h.image_paths_json || '[]');
     const item = document.createElement('div');
-    item.className = 'filmstrip-item' + (h.status !== 'done' ? ' pending' : '') + (h.id === currentGenId ? ' active' : '');
+    item.className = 'filmstrip-item'
+      + (h.status !== 'done' ? ' pending' : '')
+      + (h.id === currentGenId ? ' active' : '')
+      + (compareSelection.includes(h.id) ? ' selected' : '');
     if (images.length) item.style.backgroundImage = `url('${outputUrl(images[0])}')`;
     item.title = `seed ${h.seed}`;
     item.innerHTML = `
+      <span class="compare-check"></span>
       ${images.length > 1 ? `<span class="img-count">${images.length}</span>` : ''}
       ${(h.status === 'queued' || h.status === 'running') ? `<span class="pending-icon">⟳</span>` : ''}
       <button class="delete-btn" title="Eliminar">🗑</button>
     `;
-    item.addEventListener('click', () => restoreGeneration(h.id));
+    item.addEventListener('click', () => {
+      if (compareMode) {
+        toggleCompareSelection(h.id);
+        return;
+      }
+      restoreGeneration(h.id);
+    });
     item.querySelector('.delete-btn').addEventListener('click', (e) => {
       e.stopPropagation();
       deleteSingleGeneration(h.id, loadHistory);
@@ -905,6 +953,53 @@ function renderFilmstrip() {
     track.appendChild(item);
   });
 }
+
+function toggleCompareSelection(id) {
+  const idx = compareSelection.indexOf(id);
+  if (idx !== -1) {
+    compareSelection.splice(idx, 1);
+  } else {
+    if (compareSelection.length >= 2) compareSelection.shift();
+    compareSelection.push(id);
+  }
+  renderFilmstrip();
+  if (compareSelection.length === 2) openCompareModal();
+}
+
+function openCompareModal() {
+  const [idA, idB] = compareSelection;
+  const rowA = filmstripRows.find(r => r.id === idA);
+  const rowB = filmstripRows.find(r => r.id === idB);
+  if (!rowA || !rowB) return;
+  const imagesA = JSON.parse(rowA.image_paths_json || '[]');
+  const imagesB = JSON.parse(rowB.image_paths_json || '[]');
+  document.getElementById('compareImgA').src = imagesA.length ? outputUrl(imagesA[0]) : '';
+  document.getElementById('compareImgB').src = imagesB.length ? outputUrl(imagesB[0]) : '';
+  document.getElementById('compareMetaA').textContent = `seed ${rowA.seed}`;
+  document.getElementById('compareMetaB').textContent = `seed ${rowB.seed}`;
+  document.getElementById('compareModalBackdrop').classList.add('open');
+}
+
+function closeCompareModal() {
+  document.getElementById('compareModalBackdrop').classList.remove('open');
+}
+
+document.getElementById('closeCompareModal').addEventListener('click', closeCompareModal);
+document.getElementById('compareModalBackdrop').addEventListener('click', (e) => {
+  if (e.target.id === 'compareModalBackdrop') closeCompareModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (!document.getElementById('compareModalBackdrop').classList.contains('open')) return;
+  closeCompareModal();
+});
+
+document.getElementById('compareModeBtn').addEventListener('click', () => {
+  compareMode = !compareMode;
+  compareSelection = [];
+  document.getElementById('compareModeBtn').classList.toggle('active', compareMode);
+  renderFilmstrip();
+});
 
 document.getElementById('filmstripPrev').addEventListener('click', () => {
   if (!filmstripRows.length) return;
