@@ -8,6 +8,8 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import comfy_client, comfy_process, config, db, library, ollama_client, workflow_builder
+from .character_rig import db as rig_db
+from .character_rig.router import router as character_rig_router
 from .lora_lab import db as lora_lab_db
 from .lora_lab.router import router as lora_lab_router
 from .schemas import (
@@ -15,6 +17,7 @@ from .schemas import (
     EnhancePromptRequest,
     GenerateRequest,
     LoraFavoriteRequest,
+    MoveHistoryRequest,
     NewProjectRequest,
     RenameProjectRequest,
     SaveRecipeRequest,
@@ -88,6 +91,7 @@ async def _reconcile_pending_loop() -> None:
 async def on_startup():
     global _ui_workflow_cache
     db.init_db()
+    rig_db.init_db()
     lora_lab_db.init_db()
     _ui_workflow_cache = workflow_builder.load_ui_template()
     # The node map in workflow_builder was transcribed from the editor export by
@@ -109,7 +113,13 @@ app.mount("/static", StaticFiles(directory=config.STATIC_DIR), name="static")
 app.mount("/outputs", StaticFiles(directory=config.COMFY_OUTPUT_DIR), name="outputs")
 config.LORA_JOBS_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/lora-jobs", StaticFiles(directory=config.LORA_JOBS_DIR), name="lora-jobs")
+app.include_router(character_rig_router)
 app.include_router(lora_lab_router)
+
+
+@app.get("/toolbox/character-rig")
+def character_rig_page():
+    return FileResponse(config.STATIC_DIR / "character-rig" / "index.html")
 
 
 @app.get("/toolbox/lora-lab")
@@ -490,3 +500,32 @@ def api_delete_generation(generation_id: str):
 def api_delete_generations(req: DeleteHistoryRequest):
     deleted = sum(1 for gen_id in req.ids if _delete_generation_and_files(gen_id))
     return {"deleted": deleted}
+
+
+@app.post("/api/history/move")
+def api_move_generations(req: MoveHistoryRequest):
+    projects = db.list_projects()
+    if req.project not in projects:
+        raise HTTPException(404, "Proyecto destino no encontrado")
+
+    dest_dir = config.COMFY_OUTPUT_DIR / req.project if req.project != "(root)" else config.COMFY_OUTPUT_DIR
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    moved = 0
+    for gen_id in req.ids:
+        gen = db.get_generation(gen_id)
+        if not gen or gen["project"] == req.project:
+            continue
+        paths = json.loads(gen["image_paths_json"] or "[]")
+        new_paths = []
+        for path in paths:
+            src = config.COMFY_OUTPUT_DIR / path
+            filename = src.name
+            dst = dest_dir / filename
+            if src.is_file():
+                src.rename(dst)
+            new_paths.append(filename if req.project == "(root)" else f"{req.project}/{filename}")
+        db.move_generation(gen_id, req.project, new_paths)
+        moved += 1
+
+    return {"moved": moved}

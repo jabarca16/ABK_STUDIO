@@ -29,6 +29,18 @@ document.addEventListener('click', (e) => {
   if (!themeMenuWrap.contains(e.target)) themeMenu.classList.remove('open');
 });
 
+// ---- tools menu ----
+const toolsToggle = document.getElementById('toolsToggle');
+const toolsMenu = document.getElementById('toolsMenu');
+const toolsMenuWrap = document.getElementById('toolsMenuWrap');
+toolsToggle.addEventListener('click', (e) => {
+  e.stopPropagation();
+  toolsMenu.classList.toggle('open');
+});
+document.addEventListener('click', (e) => {
+  if (!toolsMenuWrap.contains(e.target)) toolsMenu.classList.remove('open');
+});
+
 // ---- collapsible panels ----
 const mainLayout = document.getElementById('mainLayout');
 document.getElementById('leftHandle').addEventListener('click', () => {
@@ -257,7 +269,7 @@ function pathFor(project) {
 
 function updateProjectCurrentDisplay() {
   document.getElementById('projectCurrentName').textContent =
-    currentProject === '(root)' ? '— root —' : currentProject;
+    currentProject === '(root)' ? '— root —' : nsfwLabel(currentProject);
   document.getElementById('pathMeta').textContent = pathFor(currentProject);
 }
 
@@ -905,6 +917,10 @@ function outputUrl(relPath) {
 
 async function loadHistory() {
   const track = document.getElementById('filmstripTrack');
+  if (isNsfwProject(currentProject) && !nsfwViewUnlocked) {
+    renderNsfwGate(track);
+    return;
+  }
   let rows;
   try {
     rows = await api(`/api/history?project=${encodeURIComponent(currentProject)}&limit=30`);
@@ -1218,14 +1234,75 @@ let historySelectMode = false;
 let historySelectedIds = new Set();
 let historyModalHasMore = false;
 
+// ---- NSFW projects: name-prefix convention ("z_...") sorts them last and
+// gates their thumbnails behind an explicit "activar vista" click. Nothing
+// persisted beyond the project name itself — the unlock is per page load. ----
+function isNsfwProject(name) {
+  return typeof name === 'string' && name.toLowerCase().startsWith('z_');
+}
+function nsfwLabel(name) {
+  return isNsfwProject(name) ? 'Z_' + name.slice(2) : name;
+}
+let nsfwViewUnlocked = false;
+
+function renderNsfwGate(container) {
+  container.innerHTML = `
+    <div class="nsfw-gate">
+      <span class="nsfw-gate-icon">🔒</span>
+      <button class="nsfw-unlock-btn">👁 Activar vista</button>
+    </div>
+  `;
+  container.querySelector('.nsfw-unlock-btn').addEventListener('click', () => {
+    nsfwViewUnlocked = true;
+    loadHistoryModalPage(true);
+    loadHistory();
+  });
+}
+
+async function toggleProjectNsfw(name, makeNsfw) {
+  const newName = makeNsfw ? `z_${name}` : name.replace(/^z_/, '');
+  if (newName === name) return;
+  try {
+    const result = await api('/api/projects/rename', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ old_name: name, new_name: newName }),
+    });
+    if (currentProject === name) currentProject = result.name;
+    await loadProjects();
+    updateProjectCurrentDisplay();
+    updateModalActiveProjectDisplay();
+    renderHistoryModalTree();
+    loadHistoryModalPage(true);
+    loadHistory();
+  } catch (e) {
+    showToast('No se pudo actualizar: ' + e.message, true);
+    renderHistoryModalTree();
+  }
+}
+
 function renderHistoryModalTree() {
   const el = document.getElementById('historyModalTree');
   el.innerHTML = `
-    ${PROJECTS.map(p => `<div class="tree-item${currentProject === p ? ' active' : ''}" data-project="${p}">${p === '(root)' ? '— root —' : p}</div>`).join('')}
+    ${PROJECTS.map(p => {
+      if (p === '(root)') return `<div class="tree-item${currentProject === p ? ' active' : ''}" data-project="${p}"><span class="tree-label">— root —</span></div>`;
+      const nsfw = isNsfwProject(p);
+      return `<div class="tree-item${currentProject === p ? ' active' : ''}${nsfw ? ' nsfw' : ''}" data-project="${p}">
+        <label class="nsfw-check" title="Marcar como NSFW (mueve al final de la lista)">
+          <input type="checkbox" class="nsfw-checkbox" data-project="${p}" ${nsfw ? 'checked' : ''}>
+        </label>
+        <span class="tree-label">${nsfwLabel(p)}</span>
+      </div>`;
+    }).join('')}
   `;
+  el.querySelectorAll('.nsfw-checkbox').forEach(cb => {
+    cb.addEventListener('click', (e) => e.stopPropagation());
+    cb.addEventListener('change', () => toggleProjectNsfw(cb.dataset.project, cb.checked));
+  });
   el.querySelectorAll('.tree-item').forEach(item => {
     const project = item.dataset.project;
     item.addEventListener('click', () => {
+      if (project !== currentProject) nsfwViewUnlocked = false;
       currentProject = project;
       updateProjectCurrentDisplay();
       updateModalActiveProjectDisplay();
@@ -1238,7 +1315,7 @@ function renderHistoryModalTree() {
 
 function updateModalActiveProjectDisplay() {
   document.getElementById('modalActiveProjectName').textContent =
-    currentProject === '(root)' ? '— root —' : currentProject;
+    currentProject === '(root)' ? '— root —' : nsfwLabel(currentProject);
   document.getElementById('modalRenameProjectBtn').style.display =
     currentProject === '(root)' ? 'none' : 'inline-block';
 }
@@ -1291,6 +1368,11 @@ document.getElementById('newProjectModalBtn').addEventListener('click', async ()
 
 async function loadHistoryModalPage(reset, page) {
   const grid = document.getElementById('historyModalGrid');
+  if (isNsfwProject(currentProject) && !nsfwViewUnlocked) {
+    renderNsfwGate(grid);
+    document.getElementById('historyPager').style.display = 'none';
+    return;
+  }
   if (reset) {
     historyModalPage = 0;
     grid.innerHTML = `<div class="empty-note">cargando…</div>`;
@@ -1425,9 +1507,46 @@ document.getElementById('historyBulkDelete').addEventListener('click', async () 
   }
 });
 
+function openMoveModal() {
+  const select = document.getElementById('moveTargetProject');
+  select.innerHTML = PROJECTS.map(p => `<option value="${p}">${p === '(root)' ? '— root —' : p}</option>`).join('');
+  document.getElementById('moveModalBackdrop').classList.add('open');
+}
+function closeMoveModal() {
+  document.getElementById('moveModalBackdrop').classList.remove('open');
+}
+document.getElementById('historyBulkMove').addEventListener('click', () => {
+  if (!historySelectedIds.size) return;
+  openMoveModal();
+});
+document.getElementById('closeMoveModal').addEventListener('click', closeMoveModal);
+document.getElementById('moveModalBackdrop').addEventListener('click', (e) => {
+  if (e.target.id === 'moveModalBackdrop') closeMoveModal();
+});
+document.getElementById('moveConfirmBtn').addEventListener('click', async () => {
+  const ids = [...historySelectedIds];
+  const project = document.getElementById('moveTargetProject').value;
+  if (!ids.length || !project) return;
+  try {
+    const res = await api('/api/history/move', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids, project }),
+    });
+    showToast(`${res.moved} generación(es) movida(s) a ${project}`);
+    closeMoveModal();
+    setHistorySelectMode(false);
+    loadHistoryModalPage(true);
+    loadHistory();
+  } catch (e) {
+    showToast('No se pudo mover: ' + e.message, true);
+  }
+});
+
 function openProjectModal() {
   document.getElementById('historyModalBackdrop').classList.add('open');
   setHistorySelectMode(false);
+  nsfwViewUnlocked = false;
   updateModalActiveProjectDisplay();
   renderHistoryModalTree();
   loadHistoryModalPage(true);

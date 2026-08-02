@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ABK Studio</title>
-<link rel="stylesheet" href="/static/css/style.css?v=29">
+<link rel="stylesheet" href="/static/css/style.css?v=32">
 </head>
 <body>
 
@@ -23,10 +23,13 @@
     <span class="project-current" id="projectCurrentName">(root)</span>
   </button>
 
-  <a class="project-select" href="/toolbox/lora-lab" style="text-decoration:none;" title="Entrenar LoRAs con Kohya_ss">
-    <span class="tag">Toolbox</span>
-    <span class="project-current">Laboratorio de LoRAs</span>
-  </a>
+  <div class="tools-menu-wrap" id="toolsMenuWrap">
+    <button class="tools-toggle" id="toolsToggle" title="Toolbox">🧰</button>
+    <div class="tools-menu" id="toolsMenu">
+      <a class="tools-menu-item" href="/toolbox/character-rig">Character Rig Prep</a>
+      <a class="tools-menu-item" href="/toolbox/lora-lab">Laboratorio de LoRAs</a>
+    </div>
+  </div>
 
   <div class="theme-menu-wrap" id="themeMenuWrap">
     <button class="theme-toggle" id="themeToggle" title="Theme">◐</button>
@@ -263,7 +266,23 @@
     <div class="history-bulk-bar" id="historyBulkBar">
       <span id="historyBulkCount">0 seleccionadas</span>
       <button id="historyBulkCancel">Cancelar</button>
+      <button id="historyBulkMove">➜ Mover</button>
       <button id="historyBulkDelete">🗑 Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Move to project modal -->
+<div class="modal-backdrop" id="moveModalBackdrop">
+  <div class="modal move-modal">
+    <div class="modal-head">
+      <h3>Mover a proyecto</h3>
+      <button class="modal-close" id="closeMoveModal">×</button>
+    </div>
+    <div class="move-modal-body">
+      <label for="moveTargetProject">Proyecto destino</label>
+      <select id="moveTargetProject"></select>
+      <button id="moveConfirmBtn">Mover</button>
     </div>
   </div>
 </div>
@@ -343,6 +362,6 @@
   </div>
 </div>
 
-<script src="/static/js/app.js?v=28"></script>
+<script src="/static/js/app.js?v=31"></script>
 </body>
 </html>

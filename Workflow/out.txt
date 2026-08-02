@@ -1,0 +1,37 @@
+1 easy int | Width
+3 ImpactWildcardProcessor | 📝 POSITIVE
+4 ImpactWildcardProcessor | 📝 NEGATIVE
+5 Lora Loader (LoraManager) | Lora Loader (LoraManager)
+6 ToDetailerPipe | ToDetailerPipe
+7 SAMLoader | SAMLoader (Impact)
+10 UltralyticsDetectorProvider | UltralyticsDetectorProvider
+12 easy int | Height
+15 EditDetailerPipe | Edit DetailerPipe
+18 Input Parameters (Image Saver) | 🔧 Input Parameters (Image Saver)
+19 PrimitiveFloat | Max Size
+23 PrimitiveBoolean | Tiled Detailer
+27 FaceDetailerPipe | FaceDetailer (pipe)
+29 easy int | Batch Size
+30 CheckpointLoaderSimple | Cargar Punto de Control
+31 PrimitiveFloat | BBOX Crop Factor
+32 Seed (rgthree) | Seed (rgthree)
+33 UltralyticsDetectorProvider | DefaultDetectorProvider
+34 TriggerWord Toggle (LoraManager) | TriggerWord Toggle (LoraManager)
+35 easy showAnything | Show Any
+36 easy showAnything | Show Any
+37 EmptyLatentImage | Imagen Latente Vacía
+38 ImpactSwitch | Switch (Any)
+39 VAEDecode | Decodificación VAE
+40 ImpactSwitch | Switch (Any)
+41 DifferentialDiffusion | Difusión Diferencial
+43 CLIPTextEncode | CLIP Text Encode (Positive)
+44 CLIPTextEncode | CLIP Text Encode (Negative)
+45 StringConcatenate | Concatenar
+46 KSampler | KSampler
+47 RegexReplace | Reemplazo Regex
+48 StringConcatenate | Concatenar
+49 WidgetToString | Widget To String
+54 Image Saver | Image Saver
+55 CLIPSetLastLayer | Establecer Última Capa de CLIP
+64 Image Comparer (rgthree) | Image FaceDetailer
+75 ImpactSwitch | Switch (Any)

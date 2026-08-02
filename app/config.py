@@ -8,6 +8,7 @@ COMFY_BASE_URL = f"http://{COMFY_HOST}:{COMFY_PORT}"
 
 COMFY_ROOT = Path("C:/CodesA/Comfy/ComfyUI")
 COMFY_OUTPUT_DIR = COMFY_ROOT / "output"
+COMFY_INPUT_DIR = COMFY_ROOT / "input"
 COMFY_LORA_DIR = COMFY_ROOT / "models" / "loras"
 
 KOHYA_ROOT = Path("C:/CodesA/Comfy/Kohya_ss")

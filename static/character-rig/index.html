@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Character Rig Prep — ABK Studio</title>
+<link rel="stylesheet" href="/static/css/style.css?v=32">
+<link rel="stylesheet" href="/static/character-rig/css/style.css?v=3">
+</head>
+<body class="rig-body">
+
+<div class="grain"></div>
+
+<div class="topbar">
+  <a href="/" class="brand" style="text-decoration:none;">
+    <span class="mark"></span>
+    <span class="name">ABK STUDIO</span>
+  </a>
+  <span class="brand sub" style="font-family:var(--font-mono); font-size:11px; color:var(--text-faint); letter-spacing:0.04em; text-transform:uppercase; padding-left:9px; border-left:1px solid var(--line-strong);">Character Rig Prep</span>
+  <a href="/" class="rig-btn-secondary" style="width:auto; text-decoration:none; padding:6px 14px; display:flex; align-items:center; gap:6px;">← Designer</a>
+
+  <div class="rig-tabs">
+    <button class="rig-tab active" data-screen="screen1"><span class="n">1</span> Diseño base</button>
+    <button class="rig-tab" data-screen="screen2"><span class="n">2</span> Separación de capas</button>
+  </div>
+
+  <div class="status-tag" id="serverStatus" data-state="starting"><span class="status-dot"></span><span class="status-label">conectando…</span></div>
+
+  <div class="theme-menu-wrap" id="themeMenuWrap" style="margin-left:auto;">
+    <button class="theme-toggle" id="themeToggle" title="Theme">◐</button>
+    <div class="theme-menu" id="themeMenu">
+      <button class="theme-menu-item" data-theme-choice="dark">Dark</button>
+      <button class="theme-menu-item" data-theme-choice="light">Light</button>
+      <button class="theme-menu-item" data-theme-choice="nova">Nova</button>
+    </div>
+  </div>
+</div>
+
+<div class="rig-body" style="flex-direction:row; flex:1; min-height:0;">
+
+  <!-- SCREEN 1 -->
+  <div class="rig-screen active" id="screen1">
+    <div class="rig-panel" style="width:300px;">
+      <div class="rig-panel-head">
+        <p class="eyebrow">Paso 1 de 2</p>
+        <h2 id="projectHeading">Nuevo personaje</h2>
+      </div>
+      <div class="rig-panel-body" id="projectForm">
+        <label class="rig-field">
+          <span class="lbl">Nombre del proyecto</span>
+          <input type="text" id="fProjectName" placeholder="idol_bicolor_01">
+        </label>
+        <label class="rig-field">
+          <span class="lbl">Estilo de arte</span>
+          <select id="fArtStyle">
+            <option>Anime / gacha (Live2D-ready)</option>
+            <option>Semi-realista</option>
+            <option>Chibi</option>
+          </select>
+        </label>
+        <label class="rig-field">
+          <span class="lbl">Descripción del personaje</span>
+          <textarea id="fDescription">1girl, idol, long bicolor hair, futuristic school uniform, neutral expression, bust shot, simple background</textarea>
+        </label>
+        <label class="rig-field">
+          <span class="lbl">Pose base</span>
+          <select id="fPose">
+            <option>Frontal - busto (recomendado para rig)</option>
+            <option>Frontal - cuerpo completo</option>
+          </select>
+        </label>
+        <label class="rig-field">
+          <span class="lbl">Checkpoint</span>
+          <select id="fCheckpoint"></select>
+        </label>
+        <label class="rig-field">
+          <span class="lbl">Seed (-1 = aleatorio)</span>
+          <input type="text" id="fSeed" value="-1">
+        </label>
+        <button class="rig-btn-primary" id="createProjectBtn">▶ Crear proyecto</button>
+        <div class="rig-hint-box" id="projectSelector" style="display:none;">
+          <b>Proyectos existentes:</b>
+          <select id="fExistingProject" style="margin-top:6px; width:100%;"></select>
+          <button class="rig-btn-secondary" id="loadProjectBtn" style="margin-top:8px; width:100%;">Abrir</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="rig-stage-col">
+      <div class="rig-stage-toolbar">
+        <span class="meta" id="iterMeta">sin proyecto</span>
+        <div class="spacer"></div>
+        <button class="rig-btn-secondary" id="generateBaseBtn" disabled>▶ Generar imagen base</button>
+        <button class="rig-btn-primary" id="approveBaseBtn" style="width:auto; padding:9px 14px;" disabled>✓ Aprobar como base</button>
+      </div>
+      <div class="rig-stage">
+        <div class="rig-canvas-frame">
+          <img id="baseImg" alt="">
+          <div class="rig-empty-hint" id="stage1Hint">Crea un proyecto y genera la imagen base</div>
+        </div>
+      </div>
+      <div class="rig-iter-strip" id="iterStrip"></div>
+    </div>
+  </div>
+
+  <!-- SCREEN 2 -->
+  <div class="rig-screen" id="screen2">
+    <div class="rig-tool-rail">
+      <button class="rig-tool-btn active" data-tool="brush" title="Pincel de máscara">✎<span class="rig-tool-label">Pincel</span></button>
+      <button class="rig-tool-btn" data-tool="eraser" title="Borra lo que pintaste de más">⌫<span class="rig-tool-label">Borrar</span></button>
+      <div class="rig-rail-divider"></div>
+      <button class="rig-tool-btn" id="clearMaskBtn" title="Limpia toda la máscara de esta parte">🗑<span class="rig-tool-label">Reiniciar</span></button>
+    </div>
+
+    <div class="rig-panel" style="width:260px;">
+      <div class="rig-panel-head">
+        <p class="eyebrow">Paso 2 de 2</p>
+        <h2>Partes a separar</h2>
+      </div>
+      <div class="rig-panel-body" style="gap:14px;">
+        <div class="rig-part-list" id="partList"></div>
+        <div class="rig-brush-control">
+          <span style="font-family:var(--font-mono); font-size:11px;">grosor</span>
+          <input type="range" id="brushSize" min="4" max="50" value="18">
+        </div>
+        <button class="rig-btn-secondary" id="saveMaskBtn">💾 Guardar máscara corregida</button>
+        <button class="rig-btn-primary" id="generateLayerBtn">▶ Generar capa (recorte simple)</button>
+        <button class="rig-btn-secondary" id="generateOccludedBtn">🩹 Generar con relleno (oclusión)</button>
+        <div class="rig-hint-box">
+          Las 12 partes ya vienen propuestas automáticamente (Human Parts Ultra).
+          Corrige con el pincel donde haga falta — especialmente pelo delantero/trasero,
+          que el modelo no separa solo.
+          <br><br>
+          <b>Orden de capas (panel derecho):</b> las flechas ▲▼ definen qué tapa
+          a qué — una capa más abajo en la lista oculta a las de arriba. "Generar
+          con relleno" solo funciona si hay al menos una capa por debajo de la
+          seleccionada; si no, usá el recorte simple.
+        </div>
+      </div>
+    </div>
+
+    <div class="rig-stage-col">
+      <div class="rig-stage-toolbar">
+        <span class="meta">editando máscara: <b id="activePartLabel" style="color:var(--accent);">—</b></span>
+        <div class="spacer"></div>
+        <span class="meta" id="jobMeta"></span>
+      </div>
+      <div class="rig-stage">
+        <div class="rig-canvas-frame">
+          <img id="baseImg2" alt="">
+          <canvas id="maskCanvas" width="1024" height="1024"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="rig-panel rig-layers-panel" style="border-right:none; border-left:1px solid var(--line);">
+      <div class="rig-panel-head">
+        <p class="eyebrow" id="layerCount">0 capas</p>
+        <h2>Layers</h2>
+      </div>
+      <div class="rig-panel-body" id="layersList" style="gap:7px;"></div>
+      <div style="padding:12px 16px; border-top:1px solid var(--line);">
+        <button class="rig-btn-primary" id="exportBtn">⬇ Exportar capas (.zip)</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/character-rig/js/app.js?v=4"></script>
+</body>
+</html>
