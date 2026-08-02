@@ -20,7 +20,7 @@ PRESETS = {
         "network_dim": 32,
         "network_alpha": 16,
         "learning_rate": 1e-4,
-        "resolution": 1024,
+        "resolution": 768,
     },
     "fino": {
         "label": "Fino",
@@ -30,7 +30,7 @@ PRESETS = {
         "network_dim": 48,
         "network_alpha": 24,
         "learning_rate": 8e-5,
-        "resolution": 1024,
+        "resolution": 896,
     },
 }
 

@@ -174,9 +174,12 @@ def job_status(job_id: str):
     progress = training.parse_progress(lines)
     log_tail = "\n".join(lines[-15:])
 
-    still_running = job["pid"] is not None and training.is_pid_running(job["pid"])
+    # The console window stays open after the pipeline ends (-NoExit, so the
+    # user can read the output), so its process staying alive doesn't mean
+    # training is still running — the exit-code file is the real signal.
+    exit_code = training.read_exit_code(job_id)
 
-    if still_running:
+    if exit_code is None:
         current_epoch = None
         if progress["current_step"] is not None and job["total_epochs"]:
             steps_per_epoch = max(1, round(job["total_steps"] / job["total_epochs"]))
@@ -184,14 +187,14 @@ def job_status(job_id: str):
         lab_db.update_progress(job_id, progress["current_step"], current_epoch, progress["loss"], log_tail)
         return _job_view(lab_db.get_job(job_id))
 
-    # process is no longer running — decide done vs error from the output file
+    # pipeline finished (window may still be open) — decide done vs error
     output_name = training.sanitize_output_name(job["name"])
     output_file = training.find_output_file(job_id, output_name)
-    if output_file is not None:
+    if exit_code == 0 and output_file is not None:
         published_name = training.publish_to_comfy(output_file)
         lab_db.update_progress(job_id, job["total_steps"], job["total_epochs"], job["loss"], log_tail)
         lab_db.finish_job(job_id, "done", output_path=published_name)
     else:
-        tail_msg = "\n".join(lines[-6:]) or "El proceso terminó sin generar un archivo de salida."
+        tail_msg = "\n".join(lines[-6:]) or f"El proceso terminó con código {exit_code} sin generar un archivo de salida."
         lab_db.finish_job(job_id, "error", error_message=tail_msg)
     return _job_view(lab_db.get_job(job_id))

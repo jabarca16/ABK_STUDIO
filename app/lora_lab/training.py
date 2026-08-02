@@ -18,7 +18,7 @@ def _build_dataset_toml(job_id: str, trigger_word: str, preset: dict) -> Path:
     images_path = str(dataset.images_dir(job_id)).replace("\\", "\\\\")
     content = f"""[general]
 caption_extension = ".txt"
-shuffle_caption = true
+shuffle_caption = false
 keep_tokens = 1
 
 [[datasets]]
@@ -61,6 +61,8 @@ def start_training(job_id: str, preset_key: str, checkpoint: str, name: str, tri
     dataset_toml = _build_dataset_toml(job_id, trigger_word, preset)
     out_dir = dataset.output_dir(job_id)
     log_path = dataset.logs_dir(job_id) / "train.log"
+    exit_code_path = dataset.logs_dir(job_id) / "exit_code.txt"
+    exit_code_path.unlink(missing_ok=True)
     output_name = sanitize_output_name(name)
 
     total_steps = n_images * preset["num_repeats"] * preset["epochs"]
@@ -78,15 +80,29 @@ def start_training(job_id: str, preset_key: str, checkpoint: str, name: str, tri
         "--network_module", "networks.lora",
         "--network_dim", str(preset["network_dim"]),
         "--network_alpha", str(preset["network_alpha"]),
+        "--network_train_unet_only",
         "--learning_rate", str(preset["learning_rate"]),
         "--lr_scheduler", "cosine",
         "--optimizer_type", "AdamW8bit",
         "--mixed_precision", "fp16",
         "--gradient_checkpointing",
         "--cache_latents",
+        # Text encoders are only used to compute the fixed captions' embeddings
+        # once (we don't train them — see --network_train_unet_only above), so
+        # caching those outputs lets sd-scripts drop both SDXL text encoders
+        # from VRAM for the rest of the run. Without this, a 6GB card sits at
+        # ~5.8/6GB and Windows silently pages VRAM to system RAM instead of
+        # erroring, which tanked a real run to 86s/step (~50h) instead of a
+        # few seconds/step.
+        "--cache_text_encoder_outputs",
+        # Even with text encoders off-GPU, the frozen SDXL U-Net itself (fp16)
+        # plus its gradient-checkpointing activations were still enough to
+        # pin a 6GB card at ~5.8/6GB and stall — fp8 for the frozen base
+        # weights (LoRA itself still trains at the --mixed_precision above)
+        # is the other half of the standard low-VRAM combo.
+        "--fp8_base",
         "--sdpa",
         "--max_data_loader_n_workers", "0",
-        "--persistent_data_loader_workers",
         "--seed", "42",
         "--console_log_simple",
     ]
@@ -100,10 +116,17 @@ def start_training(job_id: str, preset_key: str, checkpoint: str, name: str, tri
     ps_lines.append(")")
     ps_lines.append(
         f"& {_quote_ps(str(config.KOHYA_ACCELERATE))} @trainArgs 2>&1 "
-        f"| Tee-Object -FilePath {_quote_ps(str(log_path))} -Encoding utf8"
+        f"| Tee-Object -FilePath {_quote_ps(str(log_path))}"
     )
+    # $LASTEXITCODE reflects accelerate.exe's own exit code even though it's
+    # piped through Tee-Object (a cmdlet, which doesn't touch it). Written to
+    # its own file so the backend can tell the run is over even while this
+    # window stays open (-NoExit) for the user to read the output.
+    ps_lines.append("$code = $LASTEXITCODE")
+    ps_lines.append(f"Set-Content -Path {_quote_ps(str(exit_code_path))} -Value $code")
     ps_lines.append('Write-Host ""')
-    ps_lines.append('Write-Host "Entrenamiento finalizado. Podes cerrar esta ventana."')
+    ps_lines.append('if ($code -eq 0) { Write-Host "Entrenamiento finalizado. Podes cerrar esta ventana." }')
+    ps_lines.append('else { Write-Host "El entrenamiento terminó con error (codigo $code). Revisa el log arriba." }')
 
     script_path = dataset.job_dir(job_id) / "run.ps1"
     script_path.write_text("\r\n".join(ps_lines), encoding="utf-8")
@@ -122,6 +145,20 @@ def is_pid_running(pid: int) -> bool:
         capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW,
     )
     return str(pid) in result.stdout
+
+
+def read_exit_code(job_id: str) -> int | None:
+    """None means the training pipeline hasn't finished yet — this is checked
+    instead of (not just alongside) process liveness, since the console
+    window stays open after training ends (-NoExit) and would otherwise look
+    like it's still running forever."""
+    path = dataset.logs_dir(job_id) / "exit_code.txt"
+    if not path.is_file():
+        return None
+    try:
+        return int(path.read_text(encoding="utf-8", errors="ignore").strip())
+    except ValueError:
+        return None
 
 
 def cancel(pid: int) -> None:
