@@ -8,6 +8,14 @@ COMFY_BASE_URL = f"http://{COMFY_HOST}:{COMFY_PORT}"
 
 COMFY_ROOT = Path("C:/CodesA/Comfy/ComfyUI")
 COMFY_OUTPUT_DIR = COMFY_ROOT / "output"
+COMFY_LORA_DIR = COMFY_ROOT / "models" / "loras"
+
+KOHYA_ROOT = Path("C:/CodesA/Comfy/Kohya_ss")
+KOHYA_SD_SCRIPTS_DIR = KOHYA_ROOT / "sd-scripts"
+KOHYA_PYTHON = KOHYA_ROOT / "venv" / "Scripts" / "python.exe"
+KOHYA_ACCELERATE = KOHYA_ROOT / "venv" / "Scripts" / "accelerate.exe"
+
+LORA_JOBS_DIR = PROJECT_ROOT / "data" / "lora_jobs"
 
 WORKFLOW_DIR = PROJECT_ROOT / "Workflow"
 DEFAULT_WORKFLOW = WORKFLOW_DIR / "Standard_V37.api.json"

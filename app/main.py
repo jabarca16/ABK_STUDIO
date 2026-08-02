@@ -8,6 +8,8 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import comfy_client, comfy_process, config, db, library, ollama_client, workflow_builder
+from .lora_lab import db as lora_lab_db
+from .lora_lab.router import router as lora_lab_router
 from .schemas import (
     DeleteHistoryRequest,
     EnhancePromptRequest,
@@ -86,6 +88,7 @@ async def _reconcile_pending_loop() -> None:
 async def on_startup():
     global _ui_workflow_cache
     db.init_db()
+    lora_lab_db.init_db()
     _ui_workflow_cache = workflow_builder.load_ui_template()
     # The node map in workflow_builder was transcribed from the editor export by
     # hand; if someone re-exports the workflow with different ids, say so loudly
@@ -104,6 +107,14 @@ def index():
 
 app.mount("/static", StaticFiles(directory=config.STATIC_DIR), name="static")
 app.mount("/outputs", StaticFiles(directory=config.COMFY_OUTPUT_DIR), name="outputs")
+config.LORA_JOBS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/lora-jobs", StaticFiles(directory=config.LORA_JOBS_DIR), name="lora-jobs")
+app.include_router(lora_lab_router)
+
+
+@app.get("/toolbox/lora-lab")
+def lora_lab_page():
+    return FileResponse(config.STATIC_DIR / "lora-lab" / "index.html")
 
 
 # ---------- server status ----------
