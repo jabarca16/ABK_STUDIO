@@ -35,6 +35,11 @@ class DeleteHistoryRequest(BaseModel):
     ids: list[str]
 
 
+class MoveHistoryRequest(BaseModel):
+    ids: list[str]
+    project: str
+
+
 class EnhancePromptRequest(BaseModel):
     prompt: str
     base_model: str = ""

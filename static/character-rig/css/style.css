@@ -1,0 +1,93 @@
+/* Character Rig Prep — reuses ABK Studio's own tokens from /static/css/style.css
+   (--panel, --field, --line, --text, --accent, --font-display, --font-mono,
+   --radius-m, --shadow, theme attr on <html>). This file only adds the
+   layout this section needs; it defines no colors/fonts of its own so the
+   dark/light/nova theme switch in Studio's header keeps working here too. */
+
+.rig-body{ display:flex; flex-direction:column; min-height:100vh; }
+
+.rig-tabs{ display:flex; gap:4px; background:var(--field); border:1px solid var(--line); border-radius:20px; padding:3px; margin-left:18px; }
+.rig-tab{ appearance:none; border:none; background:transparent; color:var(--text-dim); font:inherit; font-size:12.5px; font-weight:600; padding:6px 13px; border-radius:16px; cursor:pointer; display:flex; align-items:center; gap:7px; }
+.rig-tab .n{ font-family:var(--font-mono); font-size:10.5px; width:15px; height:15px; border-radius:4px; display:inline-flex; align-items:center; justify-content:center; background:var(--panel-raised); color:var(--text-faint); }
+.rig-tab.active{ background:var(--panel-raised); color:var(--text); }
+.rig-tab.active .n{ background:var(--accent); color:#1a1305; }
+
+.rig-screen{ display:none; flex:1; min-height:0; }
+.rig-screen.active{ display:flex; }
+
+.rig-panel{ display:flex; flex-direction:column; background:var(--panel); border-right:1px solid var(--line); }
+.rig-panel-head{ padding:14px 16px 10px; border-bottom:1px solid var(--line); }
+.rig-panel-head .eyebrow{ font-family:var(--font-mono); font-size:10.5px; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-faint); margin:0 0 3px; }
+.rig-panel-head h2{ margin:0; font-size:15px; font-weight:650; font-family:var(--font-display); }
+.rig-panel-body{ padding:16px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:18px; }
+
+.rig-field{ display:flex; flex-direction:column; gap:6px; font-size:12.5px; color:var(--text-dim); }
+.rig-field .lbl{ font-weight:600; color:var(--text); }
+.rig-panel select, .rig-panel textarea, .rig-panel input[type=text]{
+  background:var(--field); border:1px solid var(--line); border-radius:var(--radius-m);
+  color:var(--text); font:inherit; font-size:13px; padding:8px 10px; resize:vertical;
+}
+.rig-panel select:focus, .rig-panel textarea:focus, .rig-panel input:focus{ outline:2px solid var(--accent); outline-offset:1px; }
+.rig-panel textarea{ min-height:64px; line-height:1.4; }
+
+.rig-btn-primary{ appearance:none; border:none; border-radius:var(--radius-m); cursor:pointer; background:var(--accent); color:#fff; font:inherit; font-weight:700; font-size:13.5px; padding:11px 16px; display:flex; align-items:center; justify-content:center; gap:8px; width:100%; }
+.rig-btn-primary:hover:not(:disabled){ background:var(--accent-dim); }
+.rig-btn-primary:disabled{ opacity:0.4; cursor:not-allowed; }
+.rig-btn-secondary{ appearance:none; border:1px solid var(--line); border-radius:var(--radius-m); cursor:pointer; background:var(--field); color:var(--text); font:inherit; font-weight:600; font-size:13px; padding:9px 14px; }
+.rig-btn-secondary:hover:not(:disabled){ background:var(--panel-raised); border-color:var(--line-strong); }
+.rig-btn-secondary:disabled{ opacity:0.4; cursor:not-allowed; }
+
+.rig-stage-col{ flex:1; display:flex; flex-direction:column; min-width:0; }
+.rig-stage-toolbar{ display:flex; align-items:center; gap:10px; padding:10px 16px; border-bottom:1px solid var(--line); background:var(--panel); }
+.rig-stage-toolbar .meta{ font-family:var(--font-mono); font-size:11.5px; color:var(--text-faint); }
+.rig-stage-toolbar .spacer{ flex:1; }
+.rig-stage{ flex:1; display:flex; align-items:center; justify-content:center; background:var(--ink-950, var(--panel)); position:relative; }
+.rig-canvas-frame{ position:relative; width:420px; height:420px; background:var(--field); border:1px solid var(--line); border-radius:var(--radius-m); box-shadow:var(--shadow); overflow:hidden; }
+.rig-canvas-frame img{ position:absolute; inset:0; width:100%; height:100%; object-fit:contain; }
+.rig-canvas-frame canvas{ position:absolute; inset:0; width:100%; height:100%; cursor:crosshair; opacity:0.55; }
+.rig-empty-hint{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; padding:20px; color:var(--text-faint); font-size:13px; }
+
+.rig-iter-strip{ display:flex; gap:8px; padding:12px 16px; border-top:1px solid var(--line); background:var(--panel); overflow-x:auto; }
+.rig-iter-thumb{ width:52px; height:52px; flex:none; border-radius:var(--radius-m); border:2px solid var(--line); background:var(--field); cursor:pointer; overflow:hidden; }
+.rig-iter-thumb img{ width:100%; height:100%; object-fit:cover; display:block; }
+.rig-iter-thumb.selected{ border-color:var(--accent); }
+.rig-iter-thumb.pending{ display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-size:9px; color:var(--text-faint); }
+
+.rig-tool-rail{ width:72px; flex:none; background:var(--panel); border-right:1px solid var(--line); display:flex; flex-direction:column; align-items:center; padding:12px 6px; gap:6px; }
+.rig-tool-btn{ width:100%; height:auto; border-radius:var(--radius-m); border:1px solid transparent; background:transparent; color:var(--text-dim); font-size:16px; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; padding:7px 2px; }
+.rig-tool-btn:hover{ background:var(--field); }
+.rig-tool-btn.active{ background:var(--field); border-color:var(--accent); color:var(--accent); }
+.rig-tool-label{ font-size:9.5px; font-family:var(--font-body); line-height:1; }
+.rig-rail-divider{ width:24px; height:1px; background:var(--line); margin:4px 0; }
+
+.rig-part-list{ display:flex; flex-direction:column; gap:4px; max-height:320px; overflow-y:auto; }
+.rig-part-item{ display:flex; align-items:center; gap:9px; padding:8px 9px; border-radius:var(--radius-m); cursor:pointer; border:1px solid transparent; font-size:12.5px; }
+.rig-part-item:hover{ background:var(--field); }
+.rig-part-item.armed{ background:var(--field); border-color:var(--accent); }
+.rig-part-item .name{ flex:1; }
+.rig-part-item .status{ font-family:var(--font-mono); font-size:9px; text-transform:uppercase; letter-spacing:0.03em; padding:2px 5px; border-radius:4px; white-space:nowrap; }
+.rig-status.pendiente{ color:var(--text-faint); background:var(--field); }
+.rig-status.propuesta{ color:var(--accent); background:var(--accent-glow); }
+.rig-status.trazada{ color:#6fb2e0; background:rgba(95,168,224,0.14); }
+.rig-status.generada{ color:var(--ok); background:rgba(143,185,106,0.16); }
+.rig-status.error{ color:var(--danger); background:rgba(224,90,78,0.16); }
+
+.rig-brush-control{ display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-dim); }
+.rig-brush-control input[type=range]{ flex:1; accent-color:var(--accent); }
+
+.rig-layers-panel{ width:250px; flex:none; }
+.rig-layer-row{ display:flex; align-items:center; gap:8px; padding:8px; border-radius:var(--radius-m); border:1px solid var(--line); background:var(--field); }
+.rig-layer-row + .rig-layer-row{ margin-top:7px; }
+.rig-layer-thumb{ width:34px; height:34px; border-radius:4px; background:var(--panel-raised); flex:none; overflow:hidden; border:1px solid var(--line); }
+.rig-layer-thumb img{ width:100%; height:100%; object-fit:contain; }
+.rig-layer-info{ flex:1; min-width:0; }
+.rig-layer-info .name{ font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.rig-layer-info .sub{ font-size:10px; color:var(--text-faint); font-family:var(--font-mono); }
+
+.rig-reorder-btns{ display:flex; flex-direction:column; gap:1px; flex:none; }
+.rig-reorder-btn{ width:18px; height:16px; border:none; border-radius:2px; background:transparent; color:var(--text-faint); font-size:9px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+.rig-reorder-btn:hover:not(:disabled){ background:var(--panel-raised); color:var(--text); }
+.rig-reorder-btn:disabled{ opacity:0.25; cursor:not-allowed; }
+
+.rig-hint-box{ font-size:11.5px; color:var(--text-faint); line-height:1.5; border-top:1px solid var(--line); padding-top:12px; }
+.rig-hint-box b{ color:var(--text-dim); }

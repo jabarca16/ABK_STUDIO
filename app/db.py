@@ -226,6 +226,16 @@ def rename_project(old: str, new: str):
         )
 
 
+def move_generation(gen_id: str, new_project: str, new_paths: list[str]):
+    """Updates a generation's project and image_paths_json after its files
+    have been moved on disk to the destination project's folder."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE generations SET project = ?, image_paths_json = ? WHERE id = ?",
+            (new_project, json.dumps(new_paths), gen_id),
+        )
+
+
 def get_settings() -> dict:
     with get_conn() as conn:
         rows = conn.execute("SELECT key, value FROM settings").fetchall()

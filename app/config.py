@@ -8,6 +8,7 @@ COMFY_BASE_URL = f"http://{COMFY_HOST}:{COMFY_PORT}"
 
 COMFY_ROOT = Path("C:/CodesA/Comfy/ComfyUI")
 COMFY_OUTPUT_DIR = COMFY_ROOT / "output"
+COMFY_INPUT_DIR = COMFY_ROOT / "input"
 
 WORKFLOW_DIR = PROJECT_ROOT / "Workflow"
 DEFAULT_WORKFLOW = WORKFLOW_DIR / "Standard_V37.api.json"
