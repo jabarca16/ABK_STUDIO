@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 import uuid
 
@@ -16,6 +17,7 @@ from .schemas import (
     DeleteHistoryRequest,
     EnhancePromptRequest,
     GenerateRequest,
+    InpaintRequest,
     LoraFavoriteRequest,
     MoveHistoryRequest,
     NewProjectRequest,
@@ -409,6 +411,139 @@ async def api_cancel_generation(generation_id: str):
     db.update_generation_status(generation_id, "cancelled")
     _stop_tracking(generation_id)
     return db.get_generation(generation_id)
+
+
+@app.post("/api/inpaint")
+async def api_inpaint(req: InpaintRequest):
+    source_gen = db.get_generation(req.generation_id)
+    if not source_gen:
+        raise HTTPException(404, "Generación de origen no encontrada")
+
+    checkpoint = req.checkpoint or source_gen["checkpoint"]
+    loras = (
+        [l.model_dump() for l in req.loras]
+        if req.loras is not None
+        else json.loads(source_gen["loras_json"] or "[]")
+    )
+
+    # image_path comes straight from the frontend's outputUrl() path — keep it
+    # pinned inside COMFY_OUTPUT_DIR so it can't be walked out with "..".
+    image_path = (config.COMFY_OUTPUT_DIR / req.image_path).resolve()
+    try:
+        image_path.relative_to(config.COMFY_OUTPUT_DIR.resolve())
+    except ValueError:
+        raise HTTPException(400, "Ruta de imagen inválida")
+    if not image_path.is_file():
+        raise HTTPException(404, "Imagen de origen no encontrada en disco")
+    source_bytes = image_path.read_bytes()
+
+    try:
+        mask_b64 = req.mask_base64.split(",", 1)[-1]  # tolerate a data: URI prefix
+        mask_bytes = base64.b64decode(mask_b64)
+    except Exception:
+        raise HTTPException(400, "Máscara inválida (base64 mal formado)")
+
+    control_bytes = None
+    if req.control_base64:
+        try:
+            control_b64 = req.control_base64.split(",", 1)[-1]
+            control_bytes = base64.b64decode(control_b64)
+        except Exception:
+            raise HTTPException(400, "Boceto de control inválido (base64 mal formado)")
+
+    try:
+        source_upload = await comfy_client.upload_image(
+            f"abk_inpaint_src_{uuid.uuid4().hex}.png", source_bytes, "image/png"
+        )
+        mask_upload = await comfy_client.upload_image(
+            f"abk_inpaint_mask_{uuid.uuid4().hex}.png", mask_bytes, "image/png"
+        )
+        control_upload = (
+            await comfy_client.upload_image(
+                f"abk_inpaint_ctrl_{uuid.uuid4().hex}.png", control_bytes, "image/png"
+            )
+            if control_bytes
+            else None
+        )
+    except Exception as exc:
+        raise HTTPException(502, f"No se pudo subir la imagen a ComfyUI: {exc}")
+
+    # The instruction alone starves the sampler of style/quality/character
+    # context, letting it redesign the whole subject instead of just the
+    # painted zone — keep it grounded in the original prompt it was generated
+    # with. Same for negative_prompt: an empty one drops the original's
+    # quality-exclusion tags for this pass.
+    base_prompt = (source_gen["positive_prompt"] or "").strip()
+    base_negative = req.negative_prompt.strip() or (source_gen["negative_prompt"] or "").strip()
+    instruction = req.prompt.strip()
+
+    if req.mode == "remove":
+        # Diffusion models don't act on negation in the positive prompt ("remove
+        # the tights" just biases toward *some* legwear) — describing what to
+        # take out has to go in the negative prompt instead, and the positive
+        # prompt stays as the original so the sampler still knows the subject's
+        # style/anatomy without being told to draw the removed item.
+        full_prompt = base_prompt
+        negative_prompt = f"{base_negative}, {instruction}" if base_negative else instruction
+    else:
+        full_prompt = f"{base_prompt}, {instruction}" if base_prompt else instruction
+        negative_prompt = base_negative
+
+    params = {
+        "checkpoint": checkpoint,
+        "loras": loras,
+        "prompt": full_prompt,
+        "negative_prompt": negative_prompt,
+        "denoise": req.denoise,
+        "steps": req.steps,
+        "cfg": req.cfg,
+        "sampler": req.sampler,
+        "scheduler": req.scheduler,
+        "grow_mask_by": req.grow_mask_by,
+        "project": source_gen["project"],
+        "source_image": source_upload,
+        "mask_image": mask_upload,
+        "control_image": control_upload,
+        "control_strength": req.control_strength,
+    }
+    graph, seed = workflow_builder.build_inpaint_graph(params)
+
+    client_id = str(uuid.uuid4())
+    try:
+        result = await comfy_client.queue_prompt(graph, client_id)
+    except Exception as exc:
+        raise HTTPException(502, f"ComfyUI rechazó el job: {exc}")
+
+    prompt_id = result.get("prompt_id")
+    if not prompt_id:
+        raise HTTPException(502, f"Respuesta inesperada de ComfyUI: {result}")
+
+    gen_id = str(uuid.uuid4())
+    db.insert_generation(
+        {
+            "id": gen_id,
+            "project": source_gen["project"],
+            "prompt_id": prompt_id,
+            "status": "queued",
+            "positive_prompt": full_prompt,
+            "negative_prompt": negative_prompt,
+            "seed": seed,
+            "width": None,
+            "height": None,
+            "batch_size": 1,
+            "steps": req.steps,
+            "cfg": req.cfg,
+            "sampler": req.sampler,
+            "scheduler": req.scheduler,
+            "checkpoint": checkpoint,
+            "loras_json": json.dumps(loras),
+            "image_paths_json": "[]",
+        }
+    )
+
+    _progress_tasks[gen_id] = asyncio.create_task(_track_progress(gen_id, client_id))
+
+    return {"generation_id": gen_id, "prompt_id": prompt_id, "seed": seed}
 
 
 @app.get("/api/status/{generation_id}")

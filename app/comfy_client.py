@@ -16,6 +16,18 @@ async def queue_prompt(graph: dict, client_id: str, ui_workflow: dict | None = N
         return resp.json()
 
 
+async def upload_image(filename: str, content: bytes, content_type: str = "image/png") -> dict:
+    """Uploads bytes to ComfyUI's input dir. Returns {"name", "subfolder", "type"} —
+    the shape LoadImage/LoadImageMask "image" widgets expect (subfolder/name)."""
+    async with httpx.AsyncClient(timeout=30) as client:
+        files = {"image": (filename, content, content_type)}
+        resp = await client.post(
+            f"{config.COMFY_BASE_URL}/upload/image", files=files, data={"overwrite": "true"}
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def cancel_prompt(prompt_id: str) -> bool:
     """Interrupts prompt_id if it's running, or dequeues it if it's still
     pending — same endpoint handles both, atomically, so there's no separate

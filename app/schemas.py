@@ -22,6 +22,25 @@ class GenerateRequest(BaseModel):
     checkpoint: str
 
 
+class InpaintRequest(BaseModel):
+    generation_id: str
+    image_path: str
+    mask_base64: str
+    prompt: str
+    mode: str = "edit"  # "add" | "edit" | "remove"
+    negative_prompt: str = ""
+    denoise: float = 0.65
+    steps: int = 30
+    cfg: float = 5.0
+    sampler: str = "euler_ancestral"
+    scheduler: str = "normal"
+    grow_mask_by: int = 6
+    checkpoint: str | None = None
+    loras: list[LoraSelection] | None = None
+    control_base64: str | None = None  # hand-drawn shape sketch (white line on black), optional
+    control_strength: float = 0.6
+
+
 class NewProjectRequest(BaseModel):
     name: str
 

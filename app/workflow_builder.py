@@ -581,6 +581,175 @@ def build_prompt_graph(params: dict, toggles: dict | None = None) -> tuple[dict,
     return graph, seed
 
 
+# ---------------------------------------------------------------------------
+# Inpaint — minimal standalone graph (LoadImage/LoadImageMask ->
+# VAEEncodeForInpaint -> KSampler -> VAEDecode -> SaveImage), built fresh
+# instead of reusing the txt2img template so it stays fast and carries none of
+# the hires-fix/ADetailer machinery. Node ids start at "1000" to stay clear of
+# every id the template or FEATURE_NODES/_ADETAILER_META can use.
+INPAINT_NODE_LOAD_IMAGE = "1000"
+INPAINT_NODE_LOAD_MASK = "1001"
+INPAINT_NODE_CHECKPOINT = "1002"
+INPAINT_NODE_LORA = "1003"
+INPAINT_NODE_POSITIVE = "1004"
+INPAINT_NODE_NEGATIVE = "1005"
+INPAINT_NODE_VAE_ENCODE = "1006"
+INPAINT_NODE_SAMPLER = "1007"
+INPAINT_NODE_VAE_DECODE = "1008"
+INPAINT_NODE_SAVE = "1009"
+INPAINT_NODE_CONTROL_IMAGE = "1012"
+INPAINT_NODE_CONTROLNET_LOADER = "1013"
+INPAINT_NODE_CONTROLNET_APPLY = "1014"
+
+# Filename of the SDXL canny controlnet under ComfyUI/models/controlnet — used
+# only when the request carries a hand-drawn control sketch.
+CONTROLNET_CANNY_SDXL = "controlnet-canny-sdxl.safetensors"
+INPAINT_NODE_GROW_MASK = "1010"
+INPAINT_NODE_COMPOSITE = "1011"
+
+
+def _image_widget_value(upload: dict) -> str:
+    """LoadImage/LoadImageMask read "image" as "subfolder/name", or bare
+    "name" with no subfolder — the same shape /upload/image's response uses."""
+    subfolder = upload.get("subfolder") or ""
+    name = upload["name"]
+    return f"{subfolder}/{name}" if subfolder else name
+
+
+def build_inpaint_graph(params: dict) -> tuple[dict, int]:
+    """Standalone inpaint graph: reuses the source generation's checkpoint and
+    LoRAs, encodes the uploaded source image + mask, samples at an adjustable
+    denoise, and saves the result. `params` needs: checkpoint, loras, prompt,
+    negative_prompt, denoise, steps, cfg, sampler, scheduler, grow_mask_by,
+    project, source_image, mask_image — the last two being the
+    {"name", "subfolder", "type"} dicts ComfyUI's /upload/image returns."""
+    loras = params.get("loras") or []
+    seed = random.randint(SEED_MIN, SEED_MAX)
+    prefix = f"{_save_path(params)}/inpaint" if _save_path(params) else "inpaint"
+
+    graph = {
+        INPAINT_NODE_LOAD_IMAGE: {
+            "class_type": "LoadImage",
+            "inputs": {"image": _image_widget_value(params["source_image"])},
+        },
+        INPAINT_NODE_LOAD_MASK: {
+            "class_type": "LoadImageMask",
+            "inputs": {"image": _image_widget_value(params["mask_image"]), "channel": "red"},
+        },
+        INPAINT_NODE_CHECKPOINT: {
+            "class_type": "CheckpointLoaderSimple",
+            "inputs": {"ckpt_name": params["checkpoint"]},
+        },
+        INPAINT_NODE_LORA: {
+            "class_type": "Lora Loader (LoraManager)",
+            "inputs": {
+                "text": _lora_tag_text(loras),
+                "loras": {"__value__": _lora_widget_entries(loras)},
+                "model": [INPAINT_NODE_CHECKPOINT, 0],
+                "clip": [INPAINT_NODE_CHECKPOINT, 1],
+            },
+        },
+        INPAINT_NODE_POSITIVE: {
+            "class_type": "CLIPTextEncode",
+            "inputs": {"text": params["prompt"].strip(), "clip": [INPAINT_NODE_LORA, 1]},
+        },
+        INPAINT_NODE_NEGATIVE: {
+            "class_type": "CLIPTextEncode",
+            "inputs": {"text": params["negative_prompt"].strip(), "clip": [INPAINT_NODE_LORA, 1]},
+        },
+        # Grown once, explicitly, so the exact same mask also drives the final
+        # composite below — VAEEncodeForInpaint's own grow_mask_by would grow
+        # it a second time only for sampling, leaving the paste-back mismatched.
+        INPAINT_NODE_GROW_MASK: {
+            "class_type": "GrowMask",
+            "inputs": {
+                "mask": [INPAINT_NODE_LOAD_MASK, 0],
+                "expand": int(params["grow_mask_by"]),
+                "tapered_corners": True,
+            },
+        },
+        INPAINT_NODE_VAE_ENCODE: {
+            "class_type": "VAEEncodeForInpaint",
+            "inputs": {
+                "pixels": [INPAINT_NODE_LOAD_IMAGE, 0],
+                "vae": [INPAINT_NODE_CHECKPOINT, 2],
+                "mask": [INPAINT_NODE_GROW_MASK, 0],
+                "grow_mask_by": 0,
+            },
+        },
+        INPAINT_NODE_SAMPLER: {
+            "class_type": "KSampler",
+            "inputs": {
+                "seed": seed,
+                "steps": int(params["steps"]),
+                "cfg": float(params["cfg"]),
+                "sampler_name": params["sampler"],
+                "scheduler": params["scheduler"],
+                "denoise": float(params["denoise"]),
+                "model": [INPAINT_NODE_LORA, 0],
+                "positive": [INPAINT_NODE_POSITIVE, 0],
+                "negative": [INPAINT_NODE_NEGATIVE, 0],
+                "latent_image": [INPAINT_NODE_VAE_ENCODE, 0],
+            },
+        },
+        INPAINT_NODE_VAE_DECODE: {
+            "class_type": "VAEDecode",
+            "inputs": {"samples": [INPAINT_NODE_SAMPLER, 0], "vae": [INPAINT_NODE_CHECKPOINT, 2]},
+        },
+        # Pastes the sampled result back over the untouched source using the
+        # same grown mask, so pixels outside the painted zone are guaranteed
+        # identical to the original regardless of how high denoise is set.
+        INPAINT_NODE_COMPOSITE: {
+            "class_type": "ImageCompositeMasked",
+            "inputs": {
+                "destination": [INPAINT_NODE_LOAD_IMAGE, 0],
+                "source": [INPAINT_NODE_VAE_DECODE, 0],
+                "mask": [INPAINT_NODE_GROW_MASK, 0],
+                "x": 0,
+                "y": 0,
+                "resize_source": False,
+            },
+        },
+        INPAINT_NODE_SAVE: {
+            "class_type": "SaveImage",
+            "inputs": {"images": [INPAINT_NODE_COMPOSITE, 0], "filename_prefix": prefix},
+        },
+    }
+
+    # Optional shape guidance: a hand-drawn sketch (white line on black, drawn
+    # by the user over the source image) pins the sampler to a specific
+    # silhouette instead of leaving the shape to the text prompt alone —
+    # needed for anything text can't describe precisely (e.g. a specific
+    # creature-appendage shape). Wired in between the CLIPTextEncode outputs
+    # and the KSampler, so it only affects this pass, not the base prompt.
+    control_image = params.get("control_image")
+    if control_image:
+        graph[INPAINT_NODE_CONTROL_IMAGE] = {
+            "class_type": "LoadImage",
+            "inputs": {"image": _image_widget_value(control_image)},
+        }
+        graph[INPAINT_NODE_CONTROLNET_LOADER] = {
+            "class_type": "ControlNetLoader",
+            "inputs": {"control_net_name": CONTROLNET_CANNY_SDXL},
+        }
+        graph[INPAINT_NODE_CONTROLNET_APPLY] = {
+            "class_type": "ControlNetApplyAdvanced",
+            "inputs": {
+                "positive": [INPAINT_NODE_POSITIVE, 0],
+                "negative": [INPAINT_NODE_NEGATIVE, 0],
+                "control_net": [INPAINT_NODE_CONTROLNET_LOADER, 0],
+                "image": [INPAINT_NODE_CONTROL_IMAGE, 0],
+                "strength": float(params.get("control_strength", 0.6)),
+                "start_percent": 0.0,
+                "end_percent": 1.0,
+            },
+        }
+        graph[INPAINT_NODE_SAMPLER]["inputs"]["positive"] = [INPAINT_NODE_CONTROLNET_APPLY, 0]
+        graph[INPAINT_NODE_SAMPLER]["inputs"]["negative"] = [INPAINT_NODE_CONTROLNET_APPLY, 1]
+
+    return graph, seed
+
+
 def _apply_save_metadata(graph: dict, params: dict) -> None:
     """Image Saver writes the A1111-style parameter block Civitai and friends
     read back. Several of its fields ship as literals in the template and would

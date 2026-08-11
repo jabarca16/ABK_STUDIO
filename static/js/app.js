@@ -1605,7 +1605,10 @@ function setFramesResult(images, isError) {
 framesGrid.addEventListener('click', (e) => {
   const frame = e.target.closest('.frame');
   if (!frame || !frame.querySelector('img')) return;
-  openLightbox(canvasImages, parseInt(frame.dataset.index, 10) || 0);
+  // Fresh results don't carry a metaList of their own, but they all belong to
+  // currentGenId — build one so "editar" works here too, not just from history.
+  const metaList = currentGenId ? canvasImages.map((path) => ({ path, id: currentGenId })) : null;
+  openLightbox(canvasImages, parseInt(frame.dataset.index, 10) || 0, metaList);
 });
 
 // ================= LIGHTBOX =================
@@ -1617,12 +1620,15 @@ function renderLightbox() {
   document.getElementById('lightboxImg').src = outputUrl(lightboxImages[lightboxIndex]);
   let metaText = `${lightboxIndex + 1} / ${lightboxImages.length}`;
   const restoreBtn = document.getElementById('lightboxRestore');
+  const editBtn = document.getElementById('lightboxEdit');
   const m = lightboxMetaList && lightboxMetaList[lightboxIndex];
   if (m) {
     metaText += ` · seed ${String(m.seed).slice(0, 8)}`;
     restoreBtn.style.display = 'inline-flex';
+    editBtn.style.display = 'inline-flex';
   } else {
     restoreBtn.style.display = 'none';
+    editBtn.style.display = 'none';
   }
   document.getElementById('lightboxMeta').textContent = metaText;
   const multi = lightboxImages.length > 1;
@@ -1667,6 +1673,314 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowLeft') document.getElementById('lightboxPrev').click();
   if (e.key === 'ArrowRight') document.getElementById('lightboxNext').click();
 });
+
+// ================= INPAINT EDITOR =================
+let editBrush = { drawing: false, radius: 40 };
+let editNaturalW = 0, editNaturalH = 0;
+let editSourceGenId = null, editSourcePath = null;
+let editPolling = null;
+let editMode = 'add';
+let editTool = 'mask';
+
+const EDIT_MODE_PLACEHOLDERS = {
+  add: 'Qué agregar en la zona pintada…',
+  edit: 'Cómo modificar la zona pintada…',
+  remove: 'Qué hay que quitar (ej. "medias, thigh highs")…',
+};
+
+function setEditTool(tool) {
+  editTool = tool;
+  document.querySelectorAll('.edit-tool-tab').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.tool === tool);
+  });
+  document.getElementById('editControlHint').classList.toggle('visible', tool === 'control');
+  document.getElementById('editControlStrengthRow').classList.toggle('visible', tool === 'control');
+}
+
+document.getElementById('editToolTabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('.edit-tool-tab');
+  if (btn) setEditTool(btn.dataset.tool);
+});
+
+document.getElementById('editControlStrength').addEventListener('input', (e) => {
+  document.getElementById('editControlStrengthMeta').textContent = e.target.value;
+});
+
+function setEditMode(mode) {
+  editMode = mode;
+  document.querySelectorAll('.edit-mode-tab').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
+  document.getElementById('editPrompt').placeholder = EDIT_MODE_PLACEHOLDERS[mode];
+}
+
+document.getElementById('editModeTabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('.edit-mode-tab');
+  if (btn) setEditMode(btn.dataset.mode);
+});
+
+function openEditModal() {
+  const m = lightboxMetaList && lightboxMetaList[lightboxIndex];
+  if (!m) { showToast('No se puede editar esta imagen', true); return; }
+  editSourceGenId = m.id;
+  editSourcePath = lightboxImages[lightboxIndex];
+  const img = document.getElementById('editSourceImg');
+  img.onload = () => {
+    editNaturalW = img.naturalWidth;
+    editNaturalH = img.naturalHeight;
+    sizeEditCanvas();
+  };
+  img.src = outputUrl(editSourcePath);
+  document.getElementById('editPrompt').value = '';
+  setEditMode('add');
+  setEditTool('mask');
+  document.getElementById('editModalBackdrop').classList.add('open');
+}
+
+function closeEditModal() {
+  stopEditPolling();
+  document.getElementById('editModalBackdrop').classList.remove('open');
+  clearEditCanvas();
+}
+
+function sizeEditCanvas() {
+  const img = document.getElementById('editSourceImg');
+  const rect = img.getBoundingClientRect();
+  ['editMaskCanvas', 'editControlCanvas'].forEach((id) => {
+    const canvas = document.getElementById(id);
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+    canvas.width = editNaturalW;
+    canvas.height = editNaturalH;
+  });
+  clearEditCanvas();
+  clearEditControlCanvas();
+}
+
+function clearEditCanvas() {
+  const canvas = document.getElementById('editMaskCanvas');
+  canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function clearEditControlCanvas() {
+  const canvas = document.getElementById('editControlCanvas');
+  canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function editCanvasPoint(e) {
+  const canvas = document.getElementById('editMaskCanvas');
+  const rect = canvas.getBoundingClientRect();
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  // Canvas is displayed scaled to fit the image, but painting has to happen
+  // at the image's real resolution — map screen px back to it.
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+}
+
+let editLastPoint = null;
+
+function editPaintAt(pt) {
+  if (editTool === 'mask') {
+    const ctx = document.getElementById('editMaskCanvas').getContext('2d');
+    ctx.fillStyle = 'rgba(255,80,40,0.55)';
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, editBrush.radius, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+  // "silueta" tool: a continuous thin line (not dabs) so the drawn shape
+  // reads as an outline the controlnet can follow, not a blob like the mask.
+  const ctx = document.getElementById('editControlCanvas').getContext('2d');
+  const lineWidth = Math.max(2, editBrush.radius * 0.2);
+  ctx.strokeStyle = '#39ff6a';
+  ctx.fillStyle = '#39ff6a';
+  ctx.lineWidth = lineWidth;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  if (editLastPoint) {
+    ctx.beginPath();
+    ctx.moveTo(editLastPoint.x, editLastPoint.y);
+    ctx.lineTo(pt.x, pt.y);
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, lineWidth / 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  editLastPoint = pt;
+}
+
+(function initEditCanvasEvents() {
+  // Listens on the wrapper, not a single canvas, so it keeps working
+  // regardless of which of the two stacked canvases is visually on top.
+  const wrap = document.getElementById('editCanvasWrap');
+  const start = (e) => { editBrush.drawing = true; editLastPoint = null; editPaintAt(editCanvasPoint(e)); e.preventDefault(); };
+  const move = (e) => { if (!editBrush.drawing) return; editPaintAt(editCanvasPoint(e)); e.preventDefault(); };
+  const end = () => { editBrush.drawing = false; editLastPoint = null; };
+  wrap.addEventListener('mousedown', start);
+  wrap.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', end);
+  wrap.addEventListener('touchstart', start, { passive: false });
+  wrap.addEventListener('touchmove', move, { passive: false });
+  wrap.addEventListener('touchend', end);
+})();
+
+document.getElementById('editBrushSize').addEventListener('input', (e) => {
+  editBrush.radius = parseInt(e.target.value, 10);
+});
+document.getElementById('editClearBtn').addEventListener('click', () => {
+  if (editTool === 'control') clearEditControlCanvas();
+  else clearEditCanvas();
+});
+document.getElementById('closeEditModal').addEventListener('click', closeEditModal);
+document.getElementById('editModalBackdrop').addEventListener('click', (e) => {
+  if (e.target.id === 'editModalBackdrop') closeEditModal();
+});
+document.getElementById('editDenoise').addEventListener('input', (e) => {
+  document.getElementById('editDenoiseMeta').textContent = e.target.value;
+});
+document.getElementById('lightboxEdit').addEventListener('click', openEditModal);
+window.addEventListener('resize', () => {
+  if (document.getElementById('editModalBackdrop').classList.contains('open')) sizeEditCanvas();
+});
+
+function exportEditMask() {
+  // The painted canvas is a translucent brush stroke for visibility; the mask
+  // sent to the backend is a hard black/white PNG at the source resolution.
+  const src = document.getElementById('editMaskCanvas');
+  const out = document.createElement('canvas');
+  out.width = src.width;
+  out.height = src.height;
+  const octx = out.getContext('2d');
+  octx.fillStyle = '#000';
+  octx.fillRect(0, 0, out.width, out.height);
+  const data = src.getContext('2d').getImageData(0, 0, src.width, src.height);
+  const outData = octx.getImageData(0, 0, out.width, out.height);
+  for (let i = 0; i < data.data.length; i += 4) {
+    if (data.data[i + 3] > 0) {
+      outData.data[i] = 255; outData.data[i + 1] = 255; outData.data[i + 2] = 255; outData.data[i + 3] = 255;
+    }
+  }
+  octx.putImageData(outData, 0, 0);
+  return out.toDataURL('image/png');
+}
+
+function editControlHasContent() {
+  const canvas = document.getElementById('editControlCanvas');
+  const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+  for (let i = 3; i < data.length; i += 4) {
+    if (data[i] > 0) return true;
+  }
+  return false;
+}
+
+function exportEditControl() {
+  // Drawn on-screen in bright green for visibility over any background; the
+  // controlnet expects a plain white-line-on-black sketch at source resolution.
+  const src = document.getElementById('editControlCanvas');
+  const out = document.createElement('canvas');
+  out.width = src.width;
+  out.height = src.height;
+  const octx = out.getContext('2d');
+  octx.fillStyle = '#000';
+  octx.fillRect(0, 0, out.width, out.height);
+  const data = src.getContext('2d').getImageData(0, 0, src.width, src.height);
+  const outData = octx.getImageData(0, 0, out.width, out.height);
+  for (let i = 0; i < data.data.length; i += 4) {
+    if (data.data[i + 3] > 0) {
+      outData.data[i] = 255; outData.data[i + 1] = 255; outData.data[i + 2] = 255; outData.data[i + 3] = 255;
+    }
+  }
+  octx.putImageData(outData, 0, 0);
+  return out.toDataURL('image/png');
+}
+
+function stopEditPolling() {
+  if (editPolling) clearInterval(editPolling);
+  editPolling = null;
+}
+
+async function editPollStatus(generationId) {
+  try {
+    const g = await api(`/api/status/${generationId}`);
+    if (g.status === 'done') {
+      stopEditPolling();
+      document.getElementById('editProgress').style.display = 'none';
+      document.getElementById('editRegenerateBtn').disabled = false;
+      const images = JSON.parse(g.image_paths_json || '[]');
+      if (images[0]) {
+        editSourcePath = images[0];
+        const img = document.getElementById('editSourceImg');
+        img.onload = () => {
+          editNaturalW = img.naturalWidth;
+          editNaturalH = img.naturalHeight;
+          sizeEditCanvas();
+        };
+        img.src = outputUrl(images[0]);
+      }
+      loadHistory();
+      showToast('Edición completada');
+    } else if (g.status === 'error') {
+      stopEditPolling();
+      document.getElementById('editProgress').style.display = 'none';
+      document.getElementById('editRegenerateBtn').disabled = false;
+      showToast('La edición falló en ComfyUI', true);
+    } else {
+      document.getElementById('editProgressLabel').textContent =
+        g.status === 'running' ? 'Generando…' : 'En cola…';
+    }
+  } catch (e) {
+    // transient network hiccup while polling — keep trying silently
+  }
+}
+
+async function startEditRegenerate() {
+  const prompt = document.getElementById('editPrompt').value.trim();
+  if (!prompt) { showToast('Escribe una instrucción', true); return; }
+  const canvas = document.getElementById('editMaskCanvas');
+  const maskData = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+  let hasPaint = false;
+  for (let i = 3; i < maskData.length; i += 4) {
+    if (maskData[i] > 0) { hasPaint = true; break; }
+  }
+  if (!hasPaint) { showToast('Pinta la zona a corregir', true); return; }
+
+  const payload = {
+    generation_id: editSourceGenId,
+    image_path: editSourcePath,
+    mask_base64: exportEditMask(),
+    prompt,
+    mode: editMode,
+    denoise: parseFloat(document.getElementById('editDenoise').value),
+  };
+  if (editControlHasContent()) {
+    payload.control_base64 = exportEditControl();
+    payload.control_strength = parseFloat(document.getElementById('editControlStrength').value);
+  }
+
+  document.getElementById('editRegenerateBtn').disabled = true;
+  document.getElementById('editProgress').style.display = 'flex';
+  document.getElementById('editProgressLabel').textContent = 'Enviando a ComfyUI…';
+
+  try {
+    const res = await api('/api/inpaint', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (editPolling) clearInterval(editPolling);
+    editPolling = setInterval(() => editPollStatus(res.generation_id), 1200);
+    editPollStatus(res.generation_id);
+  } catch (e) {
+    document.getElementById('editRegenerateBtn').disabled = false;
+    document.getElementById('editProgress').style.display = 'none';
+    showToast('No se pudo lanzar la edición: ' + e.message, true);
+  }
+}
+
+document.getElementById('editRegenerateBtn').addEventListener('click', startEditRegenerate);
 
 function stopPolling() {
   if (polling) clearInterval(polling);

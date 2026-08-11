@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ABK Studio</title>
-<link rel="stylesheet" href="/static/css/style.css?v=32">
+<link rel="stylesheet" href="/static/css/style.css?v=35">
 </head>
 <body>
 
@@ -222,6 +222,56 @@
     <button class="lightbox-nav next" id="lightboxNext">›</button>
     <div class="lightbox-meta" id="lightboxMeta"></div>
     <button class="lightbox-restore" id="lightboxRestore" title="Usar estos parámetros">↺ usar parámetros</button>
+    <button class="lightbox-edit" id="lightboxEdit" title="Corregir una zona (inpaint)">✎ editar</button>
+  </div>
+</div>
+
+<!-- Inpaint editor modal -->
+<div class="modal-backdrop" id="editModalBackdrop">
+  <div class="modal edit-modal">
+    <div class="modal-head">
+      <h3>Editar imagen</h3>
+      <div class="edit-tool-tabs" id="editToolTabs">
+        <button type="button" class="edit-tool-tab active" data-tool="mask">✎ máscara</button>
+        <button type="button" class="edit-tool-tab" data-tool="control">〜 silueta</button>
+      </div>
+      <label class="edit-brush-control">
+        Pincel
+        <input type="range" id="editBrushSize" min="8" max="200" value="40">
+      </label>
+      <button class="select-toggle-btn" id="editClearBtn">Limpiar</button>
+      <button class="modal-close" id="closeEditModal">×</button>
+    </div>
+    <div class="edit-canvas-wrap" id="editCanvasWrap">
+      <img id="editSourceImg" src="" alt="">
+      <canvas id="editMaskCanvas"></canvas>
+      <canvas id="editControlCanvas"></canvas>
+    </div>
+    <div class="edit-footer">
+      <div class="edit-mode-tabs" id="editModeTabs">
+        <button type="button" class="edit-mode-tab active" data-mode="add">Agregar</button>
+        <button type="button" class="edit-mode-tab" data-mode="edit">Editar</button>
+        <button type="button" class="edit-mode-tab" data-mode="remove">Quitar</button>
+      </div>
+      <textarea id="editPrompt" placeholder="Instrucción para la zona pintada…" rows="2"></textarea>
+      <p class="edit-hint" id="editControlHint">
+        Con "silueta" activo, dibujá el contorno exacto de lo que querés agregar (ej. la forma de una cola) — guía al modelo además del texto.
+      </p>
+      <div class="edit-footer-row">
+        <label class="edit-denoise-control">
+          Denoise <span id="editDenoiseMeta">0.65</span>
+          <input type="range" id="editDenoise" min="0.1" max="1" step="0.05" value="0.65">
+        </label>
+        <label class="edit-denoise-control" id="editControlStrengthRow">
+          Guía <span id="editControlStrengthMeta">0.6</span>
+          <input type="range" id="editControlStrength" min="0.1" max="1" step="0.05" value="0.6">
+        </label>
+        <button class="edit-regenerate-btn" id="editRegenerateBtn">Regenerar</button>
+      </div>
+      <div class="edit-progress" id="editProgress" style="display:none;">
+        <span id="editProgressLabel">Generando…</span>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -362,6 +412,6 @@
   </div>
 </div>
 
-<script src="/static/js/app.js?v=31"></script>
+<script src="/static/js/app.js?v=33"></script>
 </body>
 </html>
